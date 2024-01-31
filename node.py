@@ -290,7 +290,7 @@ class GenerationInpaint:
 
         resized_mask = mask_image.resize((w - int(blur_mask / 2), h - int(blur_mask / 2)))
         maskWithBlur = Image.new("RGB", (w, h), (0, 0, 0))
-        maskWithBlur.paste(resized_mask, (int(blur_mask / 2), int(blur_mask)))
+        maskWithBlur.paste(resized_mask, (int(blur_mask / 2), int(blur_mask / 2)))
         maskWithBlur = maskWithBlur.filter(ImageFilter.GaussianBlur(radius = blur_mask))
         maskWithBlur = maskWithBlur.convert("L")
         pose_image = Image.fromarray(pose_image)
