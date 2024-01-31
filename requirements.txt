@@ -1,0 +1,8 @@
+insightface
+onnxruntime-gpu
+opencv-python
+transformers 
+diffusers
+accelerate
+pillow
+

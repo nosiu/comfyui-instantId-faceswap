@@ -10,9 +10,9 @@ Allows usage of [LCM Lora](https://huggingface.co/latent-consistency/lcm-lora-sd
 ## Installation guide
 1. Clone or download this repository and put it into **ComfyUI/custom_nodes**
 2. Open commandline in the  **ComfyUI/custom_nodes/comfyui-instantId-faceswap/** folder and type `pip install -r requirements.txt` to install dependencies
-3. Manually download required files:
+3. Manually download required files and create required folders:
     - [antelopev2 models](https://huggingface.co/DIAMONIK7777/antelopev2/tree/main)
-      andput them into **ComfyUI/custom_nodes/comfyui-instantId-faceswap/models/antelopev2** folder
+      and put them into **ComfyUI/models/insightface/models/antelopev2** folder
        -  1k3d68.onnx
        -  2d106det.onnx
        -  genderage.onnx
@@ -37,17 +37,16 @@ ComfyUI
         \---ControlNetModel
               config.json
               diffusion_pytorch_model.safetensors
-\---custom_nodes
-    \---comfyui-instantId-faceswap
+    \---insightface
         \---models
-            \---antelopev2
+            \antelopev2
                   1k3d68.onnx
                   2d106det.onnx
                   genderage.onnx
                   glintr100.onnx
                   scrfd_10g_bnkps.onnx
 ```
-*Note You don't need to add the 'ipadapter,' 'controlnet,' and 'lora' folders to this specific location if you already have them somewhere else.
+*Note You don't need to add the 'ipadapter,' 'controlnet,' 'insightface' and 'lora' folders to this specific location if you already have them somewhere else.
 Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containting those files to the config.
 
 ## Custom nodes
