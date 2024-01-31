@@ -287,14 +287,14 @@ class GenerationInpaint:
         x, y, w, h = position
 
         resized_face = face.resize((w, h))
-
-        resized_mask = mask_image.resize((w - int(blur_mask / 2), h - int(blur_mask / 2)))
-        maskWithBlur = Image.new("RGB", (w, h), (0, 0, 0))
-        maskWithBlur.paste(resized_mask, (int(blur_mask / 2), int(blur_mask / 2)))
-        maskWithBlur = maskWithBlur.filter(ImageFilter.GaussianBlur(radius = blur_mask))
-        maskWithBlur = maskWithBlur.convert("L")
+        mask_blur_offset = int(blur_mask / 2) if blur_mask > 0 else 0
+        resized_mask = mask_image.resize((w - int(blur_mask), h - int(blur_mask)))
+        mask_width_blur = Image.new("RGB", (w, h), (0, 0, 0))
+        mask_width_blur.paste(resized_mask, (mask_blur_offset, mask_blur_offset))
+        mask_width_blur = mask_width_blur.filter(ImageFilter.GaussianBlur(radius = blur_mask))
+        mask_width_blur = mask_width_blur.convert("L")
         pose_image = Image.fromarray(pose_image)
-        pose_image.paste(resized_face, (x, y), mask=maskWithBlur)
+        pose_image.paste(resized_face, (x, y), mask=mask_width_blur)
 
         return [image_to_tensor(pose_image)]
 
