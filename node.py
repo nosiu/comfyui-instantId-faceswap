@@ -1,14 +1,15 @@
 from diffusers.models import ControlNetModel
 from diffusers import LCMScheduler
+from PIL import Image, ImageFilter
 import os
 import cv2
 import torch
+import numpy as np
+import folder_paths
 import comfy.utils
+from comfy.cli_args import args, LatentPreviewMethod
 from comfy.latent_formats import SDXL
 from latent_preview import get_previewer
-import numpy as np
-from PIL import Image, ImageFilter
-import folder_paths
 from insightface.app import FaceAnalysis
 from .pipeline_stable_diffusion_xl_instantid import draw_kps
 from .pipeline_stable_diffusion_xl_instantid_inpaint import StableDiffusionXLInstantIDInpaintPipeline
@@ -268,10 +269,14 @@ class GenerationInpaint:
 
         generator = torch.Generator(device=device).manual_seed(seed)
 
-        previewer = get_previewer(device, SDXL())
+        previewer = None
+
+        if args.preview_method != LatentPreviewMethod.NoPreviews:
+            previewer = get_previewer(device, SDXL())
+
         pbar = comfy.utils.ProgressBar(steps)
 
-        def progress_fn(a, step, c, dict):
+        def progress_fn(_, step, _1, dict):
             preview_bytes = None
             if previewer:
                 preview_bytes = previewer.decode_latent_to_preview_image("JPEG", dict["latents"].float()) # first arg is unused

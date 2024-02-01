@@ -1,13 +1,20 @@
 # ComfyUI InstantID Faceswapper
+<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+
 Implementation of [faceswap](https://github.com/nosiu/InstantID-faceswap/tree/main) based on [InstantID](https://github.com/InstantID/InstantID) for ComfyUI. \
-Allows usage of [LCM Lora](https://huggingface.co/latent-consistency/lcm-lora-sdxl) which can produce good results in only a few generation steps. \
-**Works ONLY with SDXL checkpoints.** \
+Allows usage of [LCM Lora](https://huggingface.co/latent-consistency/lcm-lora-sdxl) which can produce good results in only a few generation steps.
+</br>
+**Works ONLY with SDXL checkpoints.** (for now?)
+</br>
+
 ![image](https://github.com/nosiu/comfyui-instantId-faceswap/assets/5691179/b69e11cf-ea77-4f41-95cc-c0ea84269e7b)
 ![image](https://github.com/nosiu/comfyui-instantId-faceswap/assets/5691179/597a0b1d-21fd-44ac-945a-9df4fd73eda4)
 
 
 
 ## Installation guide
+<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+
 1. Clone or download this repository and put it into **ComfyUI/custom_nodes**
 2. Open commandline in the  **ComfyUI/custom_nodes/comfyui-instantId-faceswap/** folder and type `pip install -r requirements.txt` to install dependencies
 3. Manually download required files and create required folders:
@@ -18,12 +25,12 @@ Allows usage of [LCM Lora](https://huggingface.co/latent-consistency/lcm-lora-sd
        -  genderage.onnx
        -  glintr100.onnx
        -  scrfd_10g_bnkps.onnx
-    
+
     - [IpAdapter and ControlNet](https://huggingface.co/InstantX/InstantID/tree/main)
        - ip-adapter.bin - put it into **ComfyUI/models/ipadapter**
        - ControlNetModel/diffusion_pytorch_model.safetensors - put it into **ComfyUI/models/controlnet/ControlNetModel**
        - ControlNetModel/config.json - put it into **ComfyUI/models/controlnet/ControlNetModel**
-    
+
     - [LCM Lora](https://huggingface.co/latent-consistency/lcm-lora-sdxl/tree/main) *Optional (but higly recomended)
        - pytorch_lora_weights.safetensors - put it into **ComfyUI/models/loras**
 
@@ -46,10 +53,12 @@ ComfyUI
                   glintr100.onnx
                   scrfd_10g_bnkps.onnx
 ```
-*Note You don't need to add the 'ipadapter,' 'controlnet,' 'insightface' and 'lora' folders to this specific location if you already have them somewhere else.
+*Note You don't need to add the 'ipadapter,' 'controlnet', 'insightface' and 'lora' folders to this specific location if you already have them somewhere else.
 Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containting those files to the config.
 
 ## Custom nodes
+<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+
 ### Faceswap LCM Lora
    params:
    - **lcm_lora** - path to your LCM lora inside the folder with Loras
@@ -88,10 +97,19 @@ Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containti
    - **negative2** - negative prompts
 
 ## Workflows
+<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 You can find example workflows in the /workflows folder.
 
 ## Tips
+<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+
 - If instead of face you are getting artifacts try using **resize** option with a high value if that doesn't help, try reducing the **padding** parameter.
 - By using LCM lora you can generate good images in 2-3 steps (10+ otherwise).
 - If the result is too different in color from the original, try reducing the number of steps and/or the ip_adapter_scale value.
 - If you get `No face detected in pose image` error try to increase padding. It means the current mask + padding is not enough to detect the face in the input image by insightface.
+
+## Changelog
+<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+
+- ### 0.0.1 (01.02.2024)
+  - progress bar and latent preview added for  generation node
