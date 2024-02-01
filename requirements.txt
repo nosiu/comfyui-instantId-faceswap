@@ -1,8 +1,8 @@
 insightface
 onnxruntime-gpu
 opencv-python
-transformers 
-diffusers
+transformers
+diffusers>=0.25.0
 accelerate
 pillow
 
