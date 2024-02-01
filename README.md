@@ -6,7 +6,7 @@ Allows usage of [LCM Lora](https://huggingface.co/latent-consistency/lcm-lora-sd
 </br>
 **Works ONLY with SDXL checkpoints.** (for now?)
 </br>
-
+</br>
 ![image](https://github.com/nosiu/comfyui-instantId-faceswap/assets/5691179/b69e11cf-ea77-4f41-95cc-c0ea84269e7b)
 ![image](https://github.com/nosiu/comfyui-instantId-faceswap/assets/5691179/597a0b1d-21fd-44ac-945a-9df4fd73eda4)
 
@@ -98,6 +98,7 @@ Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containti
 
 ## Workflows
 <sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+
 You can find example workflows in the /workflows folder.
 
 ## Tips
