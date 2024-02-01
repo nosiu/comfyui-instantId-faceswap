@@ -1,9 +1,11 @@
 from diffusers.models import ControlNetModel
 from diffusers import LCMScheduler
-
 import os
 import cv2
 import torch
+import comfy.utils
+from comfy.latent_formats import SDXL
+from latent_preview import get_previewer
 import numpy as np
 from PIL import Image, ImageFilter
 import folder_paths
@@ -266,6 +268,16 @@ class GenerationInpaint:
 
         generator = torch.Generator(device=device).manual_seed(seed)
 
+        previewer = get_previewer(device, SDXL())
+        pbar = comfy.utils.ProgressBar(steps)
+
+        def progress_fn(a, step, c, dict):
+            preview_bytes = None
+            if previewer:
+                preview_bytes = previewer.decode_latent_to_preview_image("JPEG", dict["latents"].float()) # first arg is unused
+            pbar.update_absolute(step + 1, steps, preview_bytes)
+            return dict
+
         output = inpaint_pipe(
             prompt=positive,
             negative_prompt=negative,
@@ -280,6 +292,7 @@ class GenerationInpaint:
             num_inference_steps=steps + 1,
             generator=generator,
             guidance_scale=guidance_scale,
+            callback_on_step_end=progress_fn
         ).images
 
         face = output[0]
