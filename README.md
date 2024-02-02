@@ -53,8 +53,8 @@ ComfyUI
                   glintr100.onnx
                   scrfd_10g_bnkps.onnx
 ```
-*Note You don't need to add the 'ipadapter,' 'controlnet', 'insightface' and 'lora' folders to this specific location if you already have them somewhere else.
-Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containting those files to the config.
+*Note You don't need to add the 'ipadapter', 'controlnet', and 'lora' folders to this specific location if you already have them somewhere else.
+Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containing those files to the config.
 
 ## Custom nodes
 <sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
