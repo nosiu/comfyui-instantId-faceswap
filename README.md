@@ -53,7 +53,8 @@ ComfyUI
                   glintr100.onnx
                   scrfd_10g_bnkps.onnx
 ```
-*Note You don't need to add the 'ipadapter,' 'controlnet', 'insightface' and 'lora' folders to this specific location if you already have them somewhere else.
+
+*Note You don't need to add the 'ipadapter', 'controlnet', and 'lora' folders to this specific location if you already have them somewhere else.
 Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containing those files to the config.
 
 ## Custom nodes
@@ -151,4 +152,5 @@ workflow_generate.py C:\Users\Admin\Desktop\ALBERT albert
    ```
 
 - ### 0.0.1 (01.02.2024)
-  - Progress bar and latent preview added for  generation node
+  - Progress bar and latent preview added for generation node
+
