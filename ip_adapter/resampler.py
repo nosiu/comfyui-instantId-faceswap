@@ -14,8 +14,8 @@ def FeedForward(dim, mult=4):
         nn.GELU(),
         nn.Linear(inner_dim, dim, bias=False),
     )
-    
-    
+
+
 def reshape_tensor(x, heads):
     bs, length, width = x.shape
     #(bs, length, width) --> (bs, length, n_heads, dim_per_head)

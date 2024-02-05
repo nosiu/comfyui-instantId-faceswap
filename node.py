@@ -11,9 +11,7 @@ from comfy.cli_args import args, LatentPreviewMethod
 from comfy.latent_formats import SDXL
 from latent_preview import get_previewer
 from insightface.app import FaceAnalysis
-from .pipeline_stable_diffusion_xl_instantid import draw_kps
-from .pipeline_stable_diffusion_xl_instantid_inpaint import StableDiffusionXLInstantIDInpaintPipeline
-
+from .pipeline_stable_diffusion_xl_instantid_inpaint import StableDiffusionXLInstantIDInpaintPipeline, draw_kps
 
 folder_paths.folder_names_and_paths["ipadapter"] = ([os.path.join(folder_paths.models_dir, "ipadapter")], folder_paths.supported_pt_extensions)
 INSIGHTFACE_PATH = os.path.join(folder_paths.models_dir, "insightface")
@@ -182,14 +180,18 @@ class SetupPipeline:
 
         app.prepare(ctx_id=0, det_size=(640, 640))
 
-        controlnet = ControlNetModel.from_pretrained(controlnet_full_path, torch_dtype=torch.float16)
+        controlnet = ControlNetModel.from_pretrained(
+            controlnet_full_path,
+            torch_dtype=torch.float16
+        )
 
         pipe = StableDiffusionXLInstantIDInpaintPipeline.from_single_file(
             checkpoint,
             controlnet=controlnet,
             torch_dtype=torch.float16,
-            use_safetensors=True,
+            use_safetensors=True
         )
+
         pipe.to(device)
 
         pipe.load_ip_adapter_instantid(ipadapter)
