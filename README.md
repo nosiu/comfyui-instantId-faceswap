@@ -114,6 +114,7 @@ The script will not upload reference images into the `ComfyUI/input` folder. As 
 
 If you move, rename, delete image files, or modify paths in any way, the workflow will stop working.
 
+**You may see warnings (errors) in the console while loading generated workflows, ignore those.**
 ### Usage
 arguments:
 - input folder absolute path

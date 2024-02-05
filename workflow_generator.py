@@ -262,7 +262,7 @@ upload_ref_image_node = {
   "properties": {
     "Node name for S&R": "LoadImage"
   },
-  "widgets_values": [image, "image"],
+  "widgets_values": [image, ""],
   "color": "#223",
   "bgcolor": "#335"
 }
