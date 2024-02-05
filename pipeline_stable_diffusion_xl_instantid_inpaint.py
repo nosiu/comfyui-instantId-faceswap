@@ -1,13 +1,16 @@
 # based on https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/controlnet/pipeline_controlnet_inpaint_sd_xl.py
 
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+import cv2
+import PIL.Image
+import numpy as np
+import torch.nn.functional as F
+import math
 
 import torch
 import torch.nn.functional as F
 
 from diffusers.image_processor import PipelineImageInput
-
-from diffusers.models import ControlNetModel
 
 from diffusers.utils import (
     deprecate,
@@ -18,12 +21,10 @@ from diffusers.pipelines.stable_diffusion_xl import StableDiffusionXLPipelineOut
 
 from diffusers import StableDiffusionXLControlNetInpaintPipeline
 from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
-from diffusers.utils.import_utils import is_xformers_available
 
 from .ip_adapter.resampler import Resampler
-from .ip_adapter.utils import is_torch2_available
 
-if is_torch2_available():
+if hasattr(F, "scaled_dot_product_attention"):
     from .ip_adapter.attention_processor import IPAttnProcessor2_0 as IPAttnProcessor, AttnProcessor2_0 as AttnProcessor
 else:
     from .ip_adapter.attention_processor import IPAttnProcessor, AttnProcessor
@@ -44,27 +45,35 @@ def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
     noise_cfg = guidance_rescale * noise_pred_rescaled + (1 - guidance_rescale) * noise_cfg
     return noise_cfg
 
+def draw_kps(image_pil, kps, color_list=[(255,0,0), (0,255,0), (0,0,255), (255,255,0), (255,0,255)]):
+    stickwidth = 4
+    limbSeq = np.array([[0, 2], [1, 2], [3, 2], [4, 2]])
+    kps = np.array(kps)
+
+    w, h = image_pil.size
+    out_img = np.zeros([h, w, 3])
+
+    for i in range(len(limbSeq)):
+        index = limbSeq[i]
+        color = color_list[index[0]]
+
+        x = kps[index][:, 0]
+        y = kps[index][:, 1]
+        length = ((x[0] - x[1]) ** 2 + (y[0] - y[1]) ** 2) ** 0.5
+        angle = math.degrees(math.atan2(y[0] - y[1], x[0] - x[1]))
+        polygon = cv2.ellipse2Poly((int(np.mean(x)), int(np.mean(y))), (int(length / 2), stickwidth), int(angle), 0, 360, 1)
+        out_img = cv2.fillConvexPoly(out_img.copy(), polygon, color)
+    out_img = (out_img * 0.6).astype(np.uint8)
+
+    for idx_kp, kp in enumerate(kps):
+        color = color_list[idx_kp]
+        x, y = kp
+        out_img = cv2.circle(out_img.copy(), (int(x), int(y)), 10, color, -1)
+
+    out_img_pil = PIL.Image.fromarray(out_img.astype(np.uint8))
+    return out_img_pil
+
 class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpaintPipeline):
-
-    def cuda(self, dtype=torch.float16, use_xformers=False):
-        self.to('cuda', dtype)
-
-        if hasattr(self, 'image_proj_model'):
-            self.image_proj_model.to(self.unet.device).to(self.unet.dtype)
-
-        if use_xformers:
-            if is_xformers_available():
-                import xformers
-                from packaging import version
-
-                xformers_version = version.parse(xformers.__version__)
-                if xformers_version == version.parse("0.0.16"):
-                    logger.warn(
-                        "xFormers 0.0.16 cannot be used for training in some GPUs. If you observe problems during training, please update xFormers to at least 0.0.17. See https://huggingface.co/docs/diffusers/main/en/optimization/xformers for more details."
-                    )
-                self.enable_xformers_memory_efficient_attention()
-            else:
-                raise ValueError("xformers is not available. Make sure it is installed correctly")
 
     def load_ip_adapter_instantid(self, model_ckpt, image_emb_dim=512, num_tokens=16, scale=0.5):
         self.set_image_proj_model(model_ckpt, image_emb_dim, num_tokens)
@@ -107,13 +116,15 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
             elif name.startswith("down_blocks"):
                 block_id = int(name[len("down_blocks.")])
                 hidden_size = unet.config.block_out_channels[block_id]
+
             if cross_attention_dim is None:
                 attn_procs[name] = AttnProcessor().to(unet.device, dtype=unet.dtype)
             else:
+
                 attn_procs[name] = IPAttnProcessor(hidden_size=hidden_size,
-                                                   cross_attention_dim=cross_attention_dim,
-                                                   scale=scale,
-                                                   num_tokens=num_tokens).to(unet.device, dtype=unet.dtype)
+                                                    cross_attention_dim=cross_attention_dim,
+                                                    scale=scale,
+                                                    num_tokens=num_tokens).to(unet.device, dtype=unet.dtype)
         unet.set_attn_processor(attn_procs)
 
         state_dict = torch.load(model_ckpt, map_location="cpu")
@@ -121,6 +132,7 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
         if 'ip_adapter' in state_dict:
             state_dict = state_dict['ip_adapter']
         ip_layers.load_state_dict(state_dict)
+
 
     def set_ip_adapter_scale(self, scale):
         unet = getattr(self, self.unet_name) if not hasattr(self, "unet") else self.unet
@@ -312,15 +324,9 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
         is_strength_max = strength == 1.0
         self._num_timesteps = len(timesteps)
 
-        # 5. Preprocess mask and image - resizes image and mask w.r.t height and width
-        # 5.1 Prepare init image
-        if padding_mask_crop is not None:
-            height, width = self.image_processor.get_default_height_width(image, height, width)
-            crops_coords = self.mask_processor.get_crop_region(mask_image, width, height, pad=padding_mask_crop)
-            resize_mode = "fill"
-        else:
-            crops_coords = None
-            resize_mode = "default"
+
+        crops_coords = None
+        resize_mode = "default"
 
         original_image = image
         init_image = self.image_processor.preprocess(
@@ -337,20 +343,21 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
                                                          self.do_classifier_free_guidance)
 
         # 5.2 Prepare control images
-        if isinstance(controlnet, ControlNetModel):
-            control_image = self.prepare_control_image(
-                image=control_image,
-                width=width,
-                height=height,
-                batch_size=batch_size * num_images_per_prompt,
-                num_images_per_prompt=num_images_per_prompt,
-                device=device,
-                dtype=controlnet.dtype,
-                #crops_coords=crops_coords,
-                #resize_mode=resize_mode,
-                do_classifier_free_guidance=self.do_classifier_free_guidance,
-                guess_mode=guess_mode,
-            )
+        #if isinstance(controlnet, ControlNetModel):
+        control_image = self.prepare_control_image(
+            image=control_image,
+            width=width,
+            height=height,
+            batch_size=batch_size * num_images_per_prompt,
+            num_images_per_prompt=num_images_per_prompt,
+            device=device,
+            dtype=controlnet.dtype,
+            crops_coords=crops_coords,
+            resize_mode=resize_mode,
+            do_classifier_free_guidance=self.do_classifier_free_guidance,
+            guess_mode=guess_mode,
+        )
+        """
         elif isinstance(controlnet, MultiControlNetModel):
             control_images = []
 
@@ -363,8 +370,8 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
                     num_images_per_prompt=num_images_per_prompt,
                     device=device,
                     dtype=controlnet.dtype,
-                    #crops_coords=crops_coords,
-                    #resize_mode=resize_mode,
+                    crops_coords=crops_coords,
+                    resize_mode=resize_mode,
                     do_classifier_free_guidance=self.do_classifier_free_guidance,
                     guess_mode=guess_mode,
                 )
@@ -374,7 +381,7 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
             control_image = control_images
         else:
             raise ValueError(f"{controlnet.__class__} is not supported.")
-
+        """
         # 5.3 Prepare mask
         mask = self.mask_processor.preprocess(
             mask_image, height=height, width=width, resize_mode=resize_mode, crops_coords=crops_coords
@@ -412,7 +419,7 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
             latents, noise = latents_outputs
 
         # 7. Prepare mask latent variables
-        mask, masked_image_latents = self.prepare_mask_latents(
+        mask, _ = self.prepare_mask_latents(
             mask,
             masked_image,
             batch_size * num_images_per_prompt,
@@ -424,6 +431,7 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
             self.do_classifier_free_guidance,
         )
 
+        """
         # 8. Check that sizes of mask, masked image and latents match
         if num_channels_unet == 9:
             # default case for runwayml/stable-diffusion-inpainting
@@ -441,6 +449,7 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
             raise ValueError(
                 f"The unet {self.unet.__class__} should have either 4 or 9 input channels, not {self.unet.config.in_channels}."
             )
+        """
         # 8.1 Prepare extra step kwargs.
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
@@ -491,7 +500,6 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
         prompt_embeds = prompt_embeds.to(device)
         add_text_embeds = add_text_embeds.to(device)
         add_time_ids = add_time_ids.to(device)
-        encoder_hidden_states = torch.cat([prompt_embeds, prompt_image_emb], dim=1)
         # 11. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
 
@@ -564,15 +572,13 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
                     return_dict=False,
                 )
 
+
                 if guess_mode and self.do_classifier_free_guidance:
                     # Infered ControlNet only for the conditional batch.
                     # To apply the output of ControlNet to both the unconditional and conditional batches,
                     # add 0 to the unconditional batch to keep it unchanged.
                     down_block_res_samples = [torch.cat([torch.zeros_like(d), d]) for d in down_block_res_samples]
                     mid_block_res_sample = torch.cat([torch.zeros_like(mid_block_res_sample), mid_block_res_sample])
-
-                if num_channels_unet == 9:
-                    latent_model_input = torch.cat([latent_model_input, mask, masked_image_latents], dim=1)
 
                 # predict the noise residual
                 noise_pred = self.unet(
@@ -598,20 +604,19 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
                 # compute the previous noisy sample x_t -> x_t-1
                 latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
 
-                if num_channels_unet == 4:
-                    init_latents_proper = image_latents
-                    if self.do_classifier_free_guidance:
-                        init_mask, _ = mask.chunk(2)
-                    else:
-                        init_mask = mask
+                init_latents_proper = image_latents
+                if self.do_classifier_free_guidance:
+                    init_mask, _ = mask.chunk(2)
+                else:
+                    init_mask = mask
 
-                    if i < len(timesteps) - 1:
-                        noise_timestep = timesteps[i + 1]
-                        init_latents_proper = self.scheduler.add_noise(
-                            init_latents_proper, noise, torch.tensor([noise_timestep])
-                        )
+                if i < len(timesteps) - 1:
+                    noise_timestep = timesteps[i + 1]
+                    init_latents_proper = self.scheduler.add_noise(
+                        init_latents_proper, noise, torch.tensor([noise_timestep])
+                    )
 
-                    latents = (1 - init_mask) * init_latents_proper + init_mask * latents
+                latents = (1 - init_mask) * init_latents_proper + init_mask * latents
 
                 if callback_on_step_end is not None:
                     callback_kwargs = {}
@@ -646,10 +651,6 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
             image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False)[0]
         else:
             return StableDiffusionXLPipelineOutput(images=latents)
-
-        # apply watermark if available
-        if self.watermark is not None:
-            image = self.watermark.apply_watermark(image)
 
         image = self.image_processor.postprocess(image, output_type=output_type)
 
