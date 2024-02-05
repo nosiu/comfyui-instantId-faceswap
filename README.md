@@ -125,6 +125,8 @@ This command will generate 'albert.json' workflow, which should include all the 
 ```
 workflow_generate.py C:\Users\Admin\Desktop\ALBERT albert
 ```
+![image](https://github.com/nosiu/comfyui-instantId-faceswap/assets/5691179/1b0f0306-5207-4447-9844-d148aa234450)
+
 ## Tips
 <sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Workflow script](#workflow-script-beta) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
