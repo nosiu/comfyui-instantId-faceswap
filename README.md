@@ -54,7 +54,7 @@ ComfyUI
                   scrfd_10g_bnkps.onnx
 ```
 *Note You don't need to add the 'ipadapter,' 'controlnet', 'insightface' and 'lora' folders to this specific location if you already have them somewhere else.
-Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containting those files to the config.
+Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containing those files to the config.
 
 ## Custom nodes
 <sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Workflow script](#workflow-script-beta) | [Tips](#tips) | [Changelog](#changelog)</sub>
@@ -110,7 +110,7 @@ You can copy the `workflow_generate.py` script anywhere you want for easier acce
 
 Only files with extensions: jpg, jpeg, bmp, png, gif, webp, and jiff will be included in the workflow.
 
-The script will not upload reference images into `the ComfyUI/input` folder. As a result, **you won't be able to preview those images.**
+The script will not upload reference images into the `ComfyUI/input` folder. As a result, **you won't be able to preview those images.**
 
 If you move, rename, delete image files, or modify paths in any way, the workflow will stop working.
 
