@@ -89,7 +89,7 @@ Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containin
    - **steps** - how many steps generation will take
    - **resize** - determines if the face region should be resized. Highly recommended, SDXL doesn't work well with small pictures well.
    - **resize_to** - only when **resize** is set to True. Maximum value to which the cut region of the image will be scaled (larger should give better results but will be slower)
-   - **mask_strength** - strenght of mask
+   - **mask_strength** - strength of mask
    - **blur_mask** - how much blur add to a mask before composing it into the the result picture
    - **seed** - seed send to pipeline
    - **control_after_generate** - what to do with seed
