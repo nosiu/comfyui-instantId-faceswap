@@ -1,4 +1,4 @@
-# ComfyUI InstantID Faceswapper v0.0.2
+# ComfyUI InstantID Faceswapper v0.0.3
 <sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Workflow script](#workflow-script-beta) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
 Implementation of [faceswap](https://github.com/nosiu/InstantID-faceswap/tree/main) based on [InstantID](https://github.com/InstantID/InstantID) for ComfyUI. \
@@ -140,6 +140,9 @@ workflow_generate.py C:\Users\Admin\Desktop\ALBERT albert
 ## Changelog
 <sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Workflow script](#workflow-script-beta) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
+- ### 0.0.3 (07.02.2024)
+
+   - Fixed an error that caused new face_embeds to be added when editing previous ones
 - ### 0.0.2 (05.02.2024)
    - Introducing workflow generator script - [more information here](#workflow-script-beta)
    - Updating the dependency diffusers to version 0.26.x. Run either:

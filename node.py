@@ -29,30 +29,22 @@ def tensor_to_numpy(tensor):
     # squeeze batch dim and normalise values to 0 - 255
     return (255.0 * tensor.cpu().numpy().squeeze()).clip(0, 255).astype(np.uint8)
 
-def resize_img(input_image, max_side=1280, min_side=1024, size=None,
-               pad_to_max_side=False, mode=Image.BILINEAR, base_pixel_number=64):
+def resize_img(input_image, max_side=1280, min_side=1024,
+               mode=Image.BILINEAR, base_pixel_number=64):
 
     if not isinstance(input_image, Image.Image): # Tensor to PIL.Image
         input_image = Image.fromarray(tensor_to_numpy(input_image))
 
     w, h = input_image.size
-    if size is not None:
-        w_resize_new, h_resize_new = size
-    else:
-        ratio = min_side / min(h, w)
-        w, h = round(ratio*w), round(ratio*h)
-        ratio = max_side / max(h, w)
-        input_image = input_image.resize([round(ratio*w), round(ratio*h)], mode)
-        w_resize_new = (round(ratio * w) // base_pixel_number) * base_pixel_number
-        h_resize_new = (round(ratio * h) // base_pixel_number) * base_pixel_number
+
+    ratio = min_side / min(h, w)
+    w, h = round(ratio*w), round(ratio*h)
+    ratio = max_side / max(h, w)
+    input_image = input_image.resize([round(ratio*w), round(ratio*h)], mode)
+    w_resize_new = (round(ratio * w) // base_pixel_number) * base_pixel_number
+    h_resize_new = (round(ratio * h) // base_pixel_number) * base_pixel_number
     input_image = input_image.resize([w_resize_new, h_resize_new], mode)
 
-    if pad_to_max_side:
-        res = np.ones([max_side, max_side, 3], dtype=np.uint8) * 255
-        offset_x = (max_side - w_resize_new) // 2
-        offset_y = (max_side - h_resize_new) // 2
-        res[offset_y:offset_y+h_resize_new, offset_x:offset_x+w_resize_new] = np.array(input_image)
-        input_image = Image.fromarray(res)
     return input_image
 
 def prepareMaskAndPoseAndControlImage(pose_image, mask_image, insightface, padding = 50, resize = True, resize_to = 1280):
@@ -114,14 +106,14 @@ class FaceEmbed:
     FUNCTION = "make_face_embed"
     CATEGORY = CATEGORY_NAME
 
-    def make_face_embed(self, insightface, face_image, face_embeds = [] ):
+    def make_face_embed(self, insightface, face_image, face_embeds = ()):
         face_image = tensor_to_numpy(face_image)
         face_info = insightface.get(cv2.cvtColor(np.array(face_image), cv2.COLOR_RGB2BGR))
         assert len(face_info) > 0, "No face detected for face embed"
         face_info = sorted(face_info, key=lambda x: (x['bbox'][2] - x['bbox'][0]) * (x['bbox'][3] - x['bbox'][1]))[-1] # only use the maximum face
         face_emb = face_info['embedding']
-        face_embeds.append(face_emb)
-        return [face_embeds]
+        face_embeds = (*face_embeds, face_emb)
+        return (face_embeds,)
 
 class LoadLCMLora:
     def __init__(self):
@@ -201,7 +193,7 @@ class SetupPipeline:
             pipe.load_lora_weights(LCM_lora)
             pipe.fuse_lora()
 
-        return [pipe, app]
+        return (pipe, app,)
 
 class GenerationInpaint:
     def __init__(self):
@@ -263,6 +255,7 @@ class GenerationInpaint:
     ):
         mask_image = tensor_to_numpy(mask)
         pose_image = tensor_to_numpy(image)
+
         face_emb = sum(np.array(face_embeds)) / len(face_embeds)
         ip_adapter_scale /= 100
         images, position = prepareMaskAndPoseAndControlImage(pose_image, mask_image, insightface, padding, resize, int(resize_to))
@@ -316,7 +309,7 @@ class GenerationInpaint:
         pose_image = Image.fromarray(pose_image)
         pose_image.paste(resized_face, (x, y), mask=mask_width_blur)
 
-        return [image_to_tensor(pose_image)]
+        return (image_to_tensor(pose_image),)
 
 NODE_CLASS_MAPPINGS = {
     "FaceSwapSetupPipeline": SetupPipeline,
