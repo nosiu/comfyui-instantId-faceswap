@@ -6,21 +6,15 @@ import PIL.Image
 import numpy as np
 import torch.nn.functional as F
 import math
-
 import torch
-import torch.nn.functional as F
 
 from diffusers.image_processor import PipelineImageInput
-
 from diffusers.utils import (
     deprecate,
     logging,
 )
 from diffusers.utils.torch_utils import is_compiled_module
-from diffusers.pipelines.stable_diffusion_xl import StableDiffusionXLPipelineOutput
-
 from diffusers import StableDiffusionXLControlNetInpaintPipeline
-from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
 
 from .ip_adapter.resampler import Resampler
 
@@ -147,6 +141,7 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
         else:
             prompt_image_emb = torch.tensor(prompt_image_emb)
 
+        self.image_proj_model.to(device)
         prompt_image_emb = prompt_image_emb.to(device=device, dtype=dtype)
         prompt_image_emb = prompt_image_emb.reshape([1, -1, self.image_proj_model_in_features])
 
@@ -203,7 +198,6 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
         negative_aesthetic_score: float = 2.5,
         clip_skip: Optional[int] = None,
         guidance_rescale: float = 0.0,
-        padding_mask_crop=None,
         callback_on_step_end: Optional[Callable[[int, int, Dict], None]] = None,
         callback_on_step_end_tensor_inputs: List[str] = ["latents"],
 
@@ -236,27 +230,11 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
         elif not isinstance(control_guidance_end, list) and isinstance(control_guidance_start, list):
             control_guidance_end = len(control_guidance_start) * [control_guidance_end]
         elif not isinstance(control_guidance_start, list) and not isinstance(control_guidance_end, list):
-            mult = len(controlnet.nets) if isinstance(controlnet, MultiControlNetModel) else 1
             control_guidance_start, control_guidance_end = (
-                mult * [control_guidance_start],
-                mult * [control_guidance_end],
+                1 * [control_guidance_start],
+                1 * [control_guidance_end],
             )
 
-        # # 0.0 Default height and width to unet
-        # height = height or self.unet.config.sample_size * self.vae_scale_factor
-        # width = width or self.unet.config.sample_size * self.vae_scale_factor
-
-        # 0.1 align format for control guidance
-        if not isinstance(control_guidance_start, list) and isinstance(control_guidance_end, list):
-            control_guidance_start = len(control_guidance_end) * [control_guidance_start]
-        elif not isinstance(control_guidance_end, list) and isinstance(control_guidance_start, list):
-            control_guidance_end = len(control_guidance_start) * [control_guidance_end]
-        elif not isinstance(control_guidance_start, list) and not isinstance(control_guidance_end, list):
-            mult = len(controlnet.nets) if isinstance(controlnet, MultiControlNetModel) else 1
-            control_guidance_start, control_guidance_end = (
-                mult * [control_guidance_start],
-                mult * [control_guidance_end],
-            )
         # 0. set ip_adapter_scale
         if ip_adapter_scale is not None:
             self.set_ip_adapter_scale(ip_adapter_scale)
@@ -273,10 +251,7 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
         else:
             batch_size = prompt_embeds.shape[0]
 
-        device = self._execution_device
-
-        if isinstance(controlnet, MultiControlNetModel) and isinstance(controlnet_conditioning_scale, float):
-            controlnet_conditioning_scale = [controlnet_conditioning_scale] * len(controlnet.nets)
+        device =self._execution_device
 
         # 3. Encode input prompt
         text_encoder_lora_scale = (
@@ -328,14 +303,13 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
         crops_coords = None
         resize_mode = "default"
 
-        original_image = image
         init_image = self.image_processor.preprocess(
             image, height=height, width=width, crops_coords=crops_coords, resize_mode=resize_mode
         )
         init_image = init_image.to(dtype=torch.float32)
 
 
-      # 3.2 Encode image prompt
+        # 3.2 Encode image prompt
         prompt_image_emb = self._encode_prompt_image_emb(image_embeds,
                                                          device,
                                                          num_images_per_prompt,
@@ -343,7 +317,6 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
                                                          self.do_classifier_free_guidance)
 
         # 5.2 Prepare control images
-        #if isinstance(controlnet, ControlNetModel):
         control_image = self.prepare_control_image(
             image=control_image,
             width=width,
@@ -357,31 +330,7 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
             do_classifier_free_guidance=self.do_classifier_free_guidance,
             guess_mode=guess_mode,
         )
-        """
-        elif isinstance(controlnet, MultiControlNetModel):
-            control_images = []
 
-            for control_image_ in control_image:
-                control_image_ = self.prepare_control_image(
-                    image=control_image_,
-                    width=width,
-                    height=height,
-                    batch_size=batch_size * num_images_per_prompt,
-                    num_images_per_prompt=num_images_per_prompt,
-                    device=device,
-                    dtype=controlnet.dtype,
-                    crops_coords=crops_coords,
-                    resize_mode=resize_mode,
-                    do_classifier_free_guidance=self.do_classifier_free_guidance,
-                    guess_mode=guess_mode,
-                )
-
-                control_images.append(control_image_)
-
-            control_image = control_images
-        else:
-            raise ValueError(f"{controlnet.__class__} is not supported.")
-        """
         # 5.3 Prepare mask
         mask = self.mask_processor.preprocess(
             mask_image, height=height, width=width, resize_mode=resize_mode, crops_coords=crops_coords
@@ -431,25 +380,6 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
             self.do_classifier_free_guidance,
         )
 
-        """
-        # 8. Check that sizes of mask, masked image and latents match
-        if num_channels_unet == 9:
-            # default case for runwayml/stable-diffusion-inpainting
-            num_channels_mask = mask.shape[1]
-            num_channels_masked_image = masked_image_latents.shape[1]
-            if num_channels_latents + num_channels_mask + num_channels_masked_image != self.unet.config.in_channels:
-                raise ValueError(
-                    f"Incorrect configuration settings! The config of `pipeline.unet`: {self.unet.config} expects"
-                    f" {self.unet.config.in_channels} but received `num_channels_latents`: {num_channels_latents} +"
-                    f" `num_channels_mask`: {num_channels_mask} + `num_channels_masked_image`: {num_channels_masked_image}"
-                    f" = {num_channels_latents+num_channels_masked_image+num_channels_mask}. Please verify the config of"
-                    " `pipeline.unet` or your `mask_image` or `image` input."
-                )
-        elif num_channels_unet != 4:
-            raise ValueError(
-                f"The unet {self.unet.__class__} should have either 4 or 9 input channels, not {self.unet.config.in_channels}."
-            )
-        """
         # 8.1 Prepare extra step kwargs.
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
@@ -460,10 +390,7 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
                 1.0 - float(i / len(timesteps) < s or (i + 1) / len(timesteps) > e)
                 for s, e in zip(control_guidance_start, control_guidance_end)
             ]
-            if isinstance(self.controlnet, MultiControlNetModel):
-                controlnet_keep.append(keeps)
-            else:
-                controlnet_keep.append(keeps[0])
+            controlnet_keep.append(keeps[0])
 
         # 9. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
         height, width = latents.shape[-2:]
@@ -475,10 +402,8 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
 
         # 10. Prepare added time ids & embeddings
         add_text_embeds = pooled_prompt_embeds
-        if self.text_encoder_2 is None:
-            text_encoder_projection_dim = int(pooled_prompt_embeds.shape[-1])
-        else:
-            text_encoder_projection_dim = self.text_encoder_2.config.projection_dim
+
+        text_encoder_projection_dim = self.text_encoder_2.config.projection_dim
 
         add_time_ids, add_neg_time_ids = self._get_add_time_ids(
             original_size,
@@ -500,6 +425,7 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
         prompt_embeds = prompt_embeds.to(device)
         add_text_embeds = add_text_embeds.to(device)
         add_time_ids = add_time_ids.to(device)
+
         # 11. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
 
@@ -539,14 +465,12 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
                     # Infer ControlNet only for the conditional batch.
                     control_model_input = latents
                     control_model_input = self.scheduler.scale_model_input(control_model_input, t)
-                    controlnet_prompt_embeds = prompt_embeds.chunk(2)[1]
                     controlnet_added_cond_kwargs = {
                         "text_embeds": add_text_embeds.chunk(2)[1],
                         "time_ids": add_time_ids.chunk(2)[1],
                     }
                 else:
                     control_model_input = latent_model_input
-                    controlnet_prompt_embeds = prompt_embeds
                     controlnet_added_cond_kwargs = added_cond_kwargs
 
                 if isinstance(controlnet_keep[i], list):
@@ -635,31 +559,13 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
                         step_idx = i // getattr(self.scheduler, "order", 1)
                         callback(step_idx, t, latents)
 
-        # make sure the VAE is in float32 mode, as it overflows in float16
-        if self.vae.dtype == torch.float16 and self.vae.config.force_upcast:
+        return latents
+
+    def decodeVae(self, latents, upcast_vae):
+        if upcast_vae:
             self.upcast_vae()
             latents = latents.to(next(iter(self.vae.post_quant_conv.parameters())).dtype)
+        face = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False)[0]
+        face = self.image_processor.postprocess(face, output_type="pil")[0]
+        return face
 
-        # If we do sequential model offloading, let's offload unet and controlnet
-        # manually for max memory savings
-        if hasattr(self, "final_offload_hook") and self.final_offload_hook is not None:
-            self.unet.to("cpu")
-            self.controlnet.to("cpu")
-            torch.cuda.empty_cache()
-
-        if not output_type == "latent":
-            image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False)[0]
-        else:
-            return StableDiffusionXLPipelineOutput(images=latents)
-
-        image = self.image_processor.postprocess(image, output_type=output_type)
-
-        if padding_mask_crop is not None:
-            image = [self.image_processor.apply_overlay(mask_image, original_image, i, crops_coords) for i in image]
-
-        # Offload all models
-        self.maybe_free_model_hooks()
-
-        if not return_dict:
-            return (image,)
-        return StableDiffusionXLPipelineOutput(images=image)
