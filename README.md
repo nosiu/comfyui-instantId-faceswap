@@ -1,4 +1,4 @@
-# ComfyUI InstantID Faceswapper v0.0.3
+# ComfyUI InstantID Faceswapper v0.0.4
 <sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Workflow script](#workflow-script-beta) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
 Implementation of [faceswap](https://github.com/nosiu/InstantID-faceswap/tree/main) based on [InstantID](https://github.com/InstantID/InstantID) for ComfyUI. \
@@ -85,16 +85,19 @@ Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containin
    - **padding** - how much the image region sent to the pipeline will be enlarged by mask bbox with padding
    - **ip_adapter_scale** - strength of ip adapter
    - **controlnet conditioning scale** - strength of controlnet
-   - **guidance_scale** - guidance scale value encourages the model to generate images closely linked to the text prompt at the expense of lower image quality. Guidance scale is enabled when guidance_scale > 1.
+   - **guidance_scale** - guidance scale value encourages the model to generate images closely linked to the text prompt at the expense of lower image quality. Guidance scale is enabled when `guidance_scale` > 1.
    - **steps** - how many steps generation will take
-   - **resize** - determines if the face region should be resized. Highly recommended, SDXL doesn't work well with small pictures well.
-   - **resize_to** - only when **resize** is set to True. Maximum value to which the cut region of the image will be scaled (larger should give better results but will be slower)
+   - **resize** - Maximum value to which the cut region of the image will be scaled. Larger values should yield better results but will be slower. To disable, select `don't`.
    - **mask_strength** - strength of mask
    - **blur_mask** - how much blur add to a mask before composing it into the the result picture
+   - **offload** -  if you are experiencing memory issues during the decoding process, this option might help.
+      - **don't** -  do nothing. This is the fastest option and does not move memory.
+      - **before decoding** - moves a significant amount of memory from VRAM to RAM to save memory before decoding. Use this option if you are running out of memory after reaching 100% during generation.
+      - **at the end** - Same as **before decoding** and moves the entire pipeline into RAM after decoding. Use this option if you are doing something else besides faceswapping.
    - **seed** - seed send to pipeline
    - **control_after_generate** - what to do with seed
    - **positive** - positive prompts
-   - **negative** - negative prompts, works only when **guidance_scale** > 1
+   - **negative** - negative prompts, works only when `guidance_scale` > 1
    - **negative2** - negative prompts
 
 ## Workflows
@@ -140,8 +143,12 @@ workflow_generate.py C:\Users\Admin\Desktop\ALBERT albert
 ## Changelog
 <sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Workflow script](#workflow-script-beta) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
+- ### 0.0.4 (14.02.2024)
+   - To save memory, you can run Comfy with the `--fp16-vae` argument to disable the default VAE upcasting to float32.
+   - Merged the old `resize` and `resize_to` options into just `resize` for the Faceswap generate node. To emulate the old behavior where resize was unchecked, select `don't`.
+   - Added a manual offload mechanism to save GPU memory.
+   - Changed the minimum and maximum values for `mask_strength` to range from 0.00 to 1.00.
 - ### 0.0.3 (07.02.2024)
-
    - Fixed an error that caused new face_embeds to be added when editing previous ones
 - ### 0.0.2 (05.02.2024)
    - Introducing workflow generator script - [more information here](#workflow-script-beta)

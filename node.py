@@ -1,6 +1,7 @@
 from diffusers.models import ControlNetModel
 from diffusers import LCMScheduler
 from PIL import Image, ImageFilter
+from time import perf_counter
 import os
 import cv2
 import torch
@@ -9,6 +10,7 @@ import folder_paths
 import comfy.utils
 from comfy.cli_args import args, LatentPreviewMethod
 from comfy.latent_formats import SDXL
+from comfy.model_management import xformers_enabled, vae_dtype, get_free_memory
 from latent_preview import get_previewer
 from insightface.app import FaceAnalysis
 from .pipeline_stable_diffusion_xl_instantid_inpaint import StableDiffusionXLInstantIDInpaintPipeline, draw_kps
@@ -17,6 +19,8 @@ folder_paths.folder_names_and_paths["ipadapter"] = ([os.path.join(folder_paths.m
 INSIGHTFACE_PATH = os.path.join(folder_paths.models_dir, "insightface")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
+
+DEBUG = False
 
 CATEGORY_NAME = "InstantId Faceswap"
 def image_to_tensor(image):
@@ -47,7 +51,7 @@ def resize_img(input_image, max_side=1280, min_side=1024,
 
     return input_image
 
-def prepareMaskAndPoseAndControlImage(pose_image, mask_image, insightface, padding = 50, resize = True, resize_to = 1280):
+def prepareMaskAndPoseAndControlImage(pose_image, mask_image, insightface, padding = 50, resize = 1280):
         mask_segments = np.where(mask_image == 255)
         m_x1 = int(np.min(mask_segments[1]))
         m_x2 = int(np.max(mask_segments[1]))
@@ -75,9 +79,10 @@ def prepareMaskAndPoseAndControlImage(pose_image, mask_image, insightface, paddi
         face_info = sorted(face_info, key=lambda x: (x['bbox'][2] - x['bbox'][0]) * (x['bbox'][3] - x['bbox'][1]))[-1] # only use the maximum face
         kps = face_info['kps']
 
-        if resize:
-            mask = resize_img(mask, resize_to)
-            image = resize_img(image, resize_to)
+        if resize != "Don't":
+            resize = int(resize)
+            mask = resize_img(mask, resize)
+            image = resize_img(image, resize)
             new_width, new_height = image.size
             kps *= [new_width / original_width, new_height / original_height]
         control_image = draw_kps(image, kps)
@@ -180,11 +185,9 @@ class SetupPipeline:
         pipe = StableDiffusionXLInstantIDInpaintPipeline.from_single_file(
             checkpoint,
             controlnet=controlnet,
-            torch_dtype=torch.float16,
+            torch_dtype=torch.float16 ,
             use_safetensors=True
         )
-
-        pipe.to(device)
 
         pipe.load_ip_adapter_instantid(ipadapter)
 
@@ -193,7 +196,15 @@ class SetupPipeline:
             pipe.load_lora_weights(LCM_lora)
             pipe.fuse_lora()
 
+        if xformers_enabled(): pipe.enable_xformers_memory_efficient_attention()
         return (pipe, app,)
+
+
+OFFLOAD_TYPES = {
+    "NONE": "don't",
+    "BEFORE_DECODING": "before decoding",
+    "AT_THE_END": "at the end"
+}
 
 class GenerationInpaint:
     def __init__(self):
@@ -213,10 +224,14 @@ class GenerationInpaint:
                 "controlnet_conditioning_scale": ("FLOAT", {"default": 0.8, "min": 0, "step": 0.1, "max": 1.0, "display": "input"}),
                 "guidance_scale": ("FLOAT", {"default": 0, "min": 0, "max": 10, "step": 0.1, "display": "input"}),
                 "steps": ("INT", {"default": 2, "min": 1, "max": 100, "step": 1, "display": "slider"}),
-                "mask_strength": ("FLOAT", {"default": 0.99, "min": 0.05, "max": 0.99, "step": 0.01, "round": 0.01,  "display": "slider"}),
+                "mask_strength": ("FLOAT", {"default": 0.99, "min": 0.00, "max": 1.00, "step": 0.01, "round": 0.01,  "display": "slider"}),
                 "blur_mask": ("INT", {"default": 0,  "min": 0, "max": 200, "step": 1,  "display": "input"}),
-                "resize": ("BOOLEAN", {"default": True, "forceInput": False}),
-                "resize_to": ([1280, 1024, 768],),
+                "resize": (["1280", "1024", "768", "Don't"],),
+                "offload": ([
+                    OFFLOAD_TYPES["NONE"],
+                    OFFLOAD_TYPES["BEFORE_DECODING"],
+                    OFFLOAD_TYPES["AT_THE_END"]
+                ],),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
 
             },
@@ -247,7 +262,7 @@ class GenerationInpaint:
         mask_strength,
         blur_mask,
         resize,
-        resize_to,
+        offload,
         seed,
         positive = "",
         negative = "",
@@ -258,7 +273,7 @@ class GenerationInpaint:
 
         face_emb = sum(np.array(face_embeds)) / len(face_embeds)
         ip_adapter_scale /= 100
-        images, position = prepareMaskAndPoseAndControlImage(pose_image, mask_image, insightface, padding, resize, int(resize_to))
+        images, position = prepareMaskAndPoseAndControlImage(pose_image, mask_image, insightface, padding, resize)
 
         mask_image, ref_image, control_image = images
 
@@ -278,7 +293,15 @@ class GenerationInpaint:
             pbar.update_absolute(step + 1, steps, preview_bytes)
             return dict
 
-        output = inpaint_pipe(
+        if DEBUG: print("Offload type: " + offload)
+        if DEBUG: print("GPU memory before pipe: " + f"{(get_free_memory() / 1024 / 1024):.3f}" + " MB")
+
+        t1 = perf_counter()
+        inpaint_pipe.to(device)
+        t2 = perf_counter()
+        if DEBUG:  print("moving pipe to GPU took: " + str(t2 - t1) + " s")
+
+        latent = inpaint_pipe(
             prompt=positive,
             negative_prompt=negative,
             negative_prompt_2=negative2,
@@ -293,14 +316,26 @@ class GenerationInpaint:
             generator=generator,
             guidance_scale=guidance_scale,
             callback_on_step_end=progress_fn
-        ).images
+        )
 
-        face = output[0]
+        if offload != OFFLOAD_TYPES['NONE']:
+            t1 = perf_counter()
+            inpaint_pipe.unet.to("cpu")
+            inpaint_pipe.controlnet.to("cpu")
+            inpaint_pipe.text_encoder.to("cpu")
+            inpaint_pipe.text_encoder_2.to("cpu")
+            inpaint_pipe.image_proj_model.to("cpu")
+            t2 = perf_counter()
+            if DEBUG:  print("moving UNET, CONTROLNET, TEXT_ENCODER, TEXT_ENCODER_2, IMAGE_PROJ_MODEL to CPU took: " + str(t2 - t1) + " s")
+            torch.cuda.empty_cache()
+
+        print("VAE TYPE: " + str(vae_dtype()))
+        face = inpaint_pipe.decodeVae(latent, vae_dtype() == torch.float32)
 
         x, y, w, h = position
 
-        resized_face = face.resize((w, h))
-        mask_blur_offset = int(blur_mask / 2) if blur_mask > 0 else 0
+        resized_face = face.resize((w, h), resample=Image.LANCZOS)
+        mask_blur_offset = int(blur_mask / 4) if blur_mask > 0 else 0
         resized_mask = mask_image.resize((w - int(blur_mask), h - int(blur_mask)))
         mask_width_blur = Image.new("RGB", (w, h), (0, 0, 0))
         mask_width_blur.paste(resized_mask, (mask_blur_offset, mask_blur_offset))
@@ -309,6 +344,12 @@ class GenerationInpaint:
         pose_image = Image.fromarray(pose_image)
         pose_image.paste(resized_face, (x, y), mask=mask_width_blur)
 
+        if offload == OFFLOAD_TYPES['AT_THE_END']:
+            inpaint_pipe.to("cpu", silence_dtype_warnings=True)
+            inpaint_pipe.image_proj_model.to("cpu")
+            torch.cuda.empty_cache()
+
+        if DEBUG: print("GPU memory at the end: " + f"{(get_free_memory() / 1024 / 1024):.3f}" + " MB")
         return (image_to_tensor(pose_image),)
 
 NODE_CLASS_MAPPINGS = {
