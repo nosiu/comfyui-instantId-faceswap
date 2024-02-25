@@ -15,8 +15,8 @@ from diffusers.utils import (
 )
 from diffusers.utils.torch_utils import is_compiled_module
 from diffusers import StableDiffusionXLControlNetInpaintPipeline
-
 from .ip_adapter.resampler import Resampler
+from .ip_adapter.attention_processor import region_control
 
 if hasattr(F, "scaled_dot_product_attention"):
     from .ip_adapter.attention_processor import IPAttnProcessor2_0 as IPAttnProcessor, AttnProcessor2_0 as AttnProcessor
@@ -110,15 +110,13 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
             elif name.startswith("down_blocks"):
                 block_id = int(name[len("down_blocks.")])
                 hidden_size = unet.config.block_out_channels[block_id]
-
             if cross_attention_dim is None:
                 attn_procs[name] = AttnProcessor().to(unet.device, dtype=unet.dtype)
             else:
-
                 attn_procs[name] = IPAttnProcessor(hidden_size=hidden_size,
-                                                    cross_attention_dim=cross_attention_dim,
-                                                    scale=scale,
-                                                    num_tokens=num_tokens).to(unet.device, dtype=unet.dtype)
+                                                   cross_attention_dim=cross_attention_dim,
+                                                   scale=scale,
+                                                   num_tokens=num_tokens).to(unet.device, dtype=unet.dtype)
         unet.set_attn_processor(attn_procs)
 
         state_dict = torch.load(model_ckpt, map_location="cpu")
@@ -130,9 +128,10 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
 
     def set_ip_adapter_scale(self, scale):
         unet = getattr(self, self.unet_name) if not hasattr(self, "unet") else self.unet
-        for attn_processor in unet.attn_processors.values():
-            if isinstance(attn_processor, IPAttnProcessor):
-                attn_processor.scale = scale
+        for key, value in unet.attn_processors.items():
+            cross_attention_dim = None if key.endswith("attn1.processor") else unet.config.cross_attention_dim
+            if cross_attention_dim is not None:
+                value.scale = scale
 
     def _encode_prompt_image_emb(self, prompt_image_emb, device, num_images_per_prompt, dtype, do_classifier_free_guidance):
 
@@ -144,7 +143,6 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
         self.image_proj_model.to(device)
         prompt_image_emb = prompt_image_emb.to(device=device, dtype=dtype)
         prompt_image_emb = prompt_image_emb.reshape([1, -1, self.image_proj_model_in_features])
-
         if do_classifier_free_guidance:
             prompt_image_emb = torch.cat([torch.zeros_like(prompt_image_emb), prompt_image_emb], dim=0)
         else:
@@ -155,7 +153,6 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
         bs_embed, seq_len, _ = prompt_image_emb.shape
         prompt_image_emb = prompt_image_emb.repeat(1, num_images_per_prompt, 1)
         prompt_image_emb = prompt_image_emb.view(bs_embed * num_images_per_prompt, seq_len, -1)
-
         return prompt_image_emb
 
     @torch.no_grad()
@@ -184,8 +181,6 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
         pooled_prompt_embeds: Optional[torch.FloatTensor] = None,
         negative_pooled_prompt_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
-        output_type: Optional[str] = "pil",
-        return_dict: bool = True,
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
         controlnet_conditioning_scale: Union[float, List[float]] = 1.0,
         guess_mode: bool = False,
@@ -203,7 +198,7 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
 
         # IP adapter
         ip_adapter_scale=None,
-
+        control_mask = None,
         **kwargs,
     ):
         callback = kwargs.pop("callback", None)
@@ -315,6 +310,27 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
                                                          num_images_per_prompt,
                                                          self.unet.dtype,
                                                          self.do_classifier_free_guidance)
+
+        # 4.1 Region control
+        if control_mask is not None:
+            mask_weight_image = control_mask
+            mask_weight_image = np.array(mask_weight_image)
+            mask_weight_image_tensor = torch.from_numpy(mask_weight_image).to(device=device, dtype=prompt_embeds.dtype)
+            mask_weight_image_tensor = mask_weight_image_tensor[:, :, 0] / 255.
+            mask_weight_image_tensor = mask_weight_image_tensor[None, None]
+            h, w = mask_weight_image_tensor.shape[-2:]
+            control_mask_wight_image_list = []
+            for scale in [8, 8, 8, 16, 16, 16, 32, 32, 32]:
+                scale_mask_weight_image_tensor = F.interpolate(
+                    mask_weight_image_tensor,(h // scale, w // scale), mode='bilinear')
+                control_mask_wight_image_list.append(scale_mask_weight_image_tensor)
+            region_mask = torch.from_numpy(np.array(control_mask)[:, :, 0]).to(self.unet.device, dtype=self.unet.dtype) / 255.
+            region_control.prompt_image_conditioning = [dict(region_mask=region_mask)]
+        else:
+            control_mask_wight_image_list = None
+            region_control.prompt_image_conditioning = [dict(region_mask=None)]
+
+
 
         # 5.2 Prepare control images
         control_image = self.prepare_control_image(
@@ -496,6 +512,13 @@ class StableDiffusionXLInstantIDInpaintPipeline(StableDiffusionXLControlNetInpai
                     return_dict=False,
                 )
 
+                # controlnet mask
+                if control_mask_wight_image_list is not None:
+                    down_block_res_samples = [
+                        down_block_res_sample * mask_weight
+                        for down_block_res_sample, mask_weight in zip(down_block_res_samples, control_mask_wight_image_list)
+                    ]
+                    mid_block_res_sample *= control_mask_wight_image_list[-1]
 
                 if guess_mode and self.do_classifier_free_guidance:
                     # Infered ControlNet only for the conditional batch.

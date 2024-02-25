@@ -8,6 +8,7 @@ import torch
 import numpy as np
 import folder_paths
 import comfy.utils
+from math import atan2, pi, ceil
 from comfy.cli_args import args, LatentPreviewMethod
 from comfy.latent_formats import SDXL
 from comfy.model_management import xformers_enabled, vae_dtype, get_free_memory
@@ -20,9 +21,12 @@ INSIGHTFACE_PATH = os.path.join(folder_paths.models_dir, "insightface")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-DEBUG = False
-
 CATEGORY_NAME = "InstantId Faceswap"
+
+DEBUG = False
+def debug(msg):
+    if DEBUG: print(msg)
+
 def image_to_tensor(image):
     img_array = np.array(image)
     # add batch dim and normalise values to 0 - 1
@@ -51,33 +55,25 @@ def resize_img(input_image, max_side=1280, min_side=1024,
 
     return input_image
 
-def prepareMaskAndPoseAndControlImage(pose_image, mask_image, insightface, padding = 50, resize = 1280):
-        mask_segments = np.where(mask_image == 255)
-        m_x1 = int(np.min(mask_segments[1]))
-        m_x2 = int(np.max(mask_segments[1]))
-        m_y1 = int(np.min(mask_segments[0]))
-        m_y2 = int(np.max(mask_segments[0]))
+def prepareMaskAndPoseAndControlImage(pose_image, mask_image, insightface, padding = 50, resize = 1280, blur_mask = 10):
+        p_x1, p_y1, p_x2, p_y2 = getMaskBboxWithPadding(mask_image, padding)
 
-        height, width, _ = pose_image.shape
-
-        p_x1 = max(0, m_x1 - padding)
-        p_y1 = max(0, m_y1 - padding)
-        p_x2 = min(width, m_x2 + padding)
-        p_y2 = min(height,m_y2 + padding)
-
-        p_x1, p_y1, p_x2, p_y2 = int(p_x1), int(p_y1), int(p_x2), int(p_y2)
-
-        image = np.array(pose_image)[p_y1:p_y2, p_x1:p_x2]
-        mask_image = np.array(mask_image)[p_y1:p_y2, p_x1:p_x2]
+        image = pose_image[p_y1:p_y2, p_x1:p_x2]
+        mask_image = mask_image[p_y1:p_y2, p_x1:p_x2]
 
         original_height, original_width, _ = image.shape
+
+        kps = getKpsFromImage(image, insightface)
+
         mask = Image.fromarray(mask_image.astype(np.uint8))
         image = Image.fromarray(image.astype(np.uint8))
 
-        face_info = insightface.get(cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR))
-        assert len(face_info) > 0, "No face detected in pose image"
-        face_info = sorted(face_info, key=lambda x: (x['bbox'][2] - x['bbox'][0]) * (x['bbox'][3] - x['bbox'][1]))[-1] # only use the maximum face
-        kps = face_info['kps']
+        mask_blur_offset = int(blur_mask / 4) if blur_mask > 0 else 0
+        resized_mask = mask.resize((original_width - int(blur_mask), original_height - int(blur_mask)))
+        mask_with_blur = Image.new("RGB", (original_width, original_height), (0, 0, 0))
+        mask_with_blur.paste(resized_mask, (mask_blur_offset, mask_blur_offset))
+        mask_with_blur = mask_with_blur.filter(ImageFilter.GaussianBlur(radius = blur_mask))
+        mask = mask_with_blur.convert("L")
 
         if resize != "Don't":
             resize = int(resize)
@@ -89,6 +85,36 @@ def prepareMaskAndPoseAndControlImage(pose_image, mask_image, insightface, paddi
 
         # (mask, pose, control), (original positon face + padding: x, y, w, h)
         return (mask, image, control_image), (p_x1, p_y1, original_width, original_height)
+
+def getMaskBboxWithPadding(mask_image, padding):
+    mask_segments = np.where(mask_image == 255)
+    m_x1 = int(np.min(mask_segments[1]))
+    m_x2 = int(np.max(mask_segments[1]))
+    m_y1 = int(np.min(mask_segments[0]))
+    m_y2 = int(np.max(mask_segments[0]))
+
+    height = mask_image.shape[0]
+    width = mask_image.shape[1]
+
+    p_x1 = max(0, m_x1 - padding)
+    p_y1 = max(0, m_y1 - padding)
+    p_x2 = min(width, m_x2 + padding)
+    p_y2 = min(height,m_y2 + padding)
+
+    return int(p_x1), int(p_y1), int(p_x2), int(p_y2)
+
+def getAngle(a=(0, 0), b=(0, 0), round_angle=False):
+    angle = atan2(b[1] - a[1], b[0] - a[0]) * 180 / pi
+    if not round_angle: return angle
+    rounded_angle = round(angle / 90) * 90
+    if rounded_angle == 360: rounded_angle = 0
+    return rounded_angle
+
+def getKpsFromImage(np_pose_image, insightface):
+    face_info = insightface.get(cv2.cvtColor(np_pose_image, cv2.COLOR_RGB2BGR))
+    assert len(face_info) > 0, "No face detected in pose image"
+    face_info = sorted(face_info, key=lambda x: (x['bbox'][2] - x['bbox'][0]) * (x['bbox'][3] - x['bbox'][1]))[-1] # only use the maximum face
+    return face_info['kps']
 
 class FaceEmbed:
     def __init__(self):
@@ -197,6 +223,7 @@ class SetupPipeline:
             pipe.fuse_lora()
 
         if xformers_enabled(): pipe.enable_xformers_memory_efficient_attention()
+
         return (pipe, app,)
 
 
@@ -204,6 +231,12 @@ OFFLOAD_TYPES = {
     "NONE": "don't",
     "BEFORE_DECODING": "before decoding",
     "AT_THE_END": "at the end"
+}
+
+ROTATE_FACE_TYPES = {
+    "LOSELESS": "loseless",
+    "ALWAYS": "always",
+    "NONE": "don't"
 }
 
 class GenerationInpaint:
@@ -221,12 +254,17 @@ class GenerationInpaint:
                 "insightface": ("INSIGHTFACE_APP",),
                 "padding": ("INT", {"default": 40, "min": 0, "max": 500, "step": 1, "display": "input"}),
                 "ip_adapter_scale": ("INT", {"default": 10, "min": 0, "max": 100, "step": 1, "round": 1, "display": "input"}),
-                "controlnet_conditioning_scale": ("FLOAT", {"default": 0.8, "min": 0, "step": 0.1, "max": 1.0, "display": "input"}),
+                "controlnet_conditioning_scale": ("FLOAT", {"default": 0.8, "min": 0, "step": 0.1, "max": 1.0}),
                 "guidance_scale": ("FLOAT", {"default": 0, "min": 0, "max": 10, "step": 0.1, "display": "input"}),
                 "steps": ("INT", {"default": 2, "min": 1, "max": 100, "step": 1, "display": "slider"}),
-                "mask_strength": ("FLOAT", {"default": 0.99, "min": 0.00, "max": 1.00, "step": 0.01, "round": 0.01,  "display": "slider"}),
+                "mask_strength": ("FLOAT", {"default": 0.99, "min": 0.01, "max": 1.00, "step": 0.01, "round": 0.01, "display": "input"}),
                 "blur_mask": ("INT", {"default": 0,  "min": 0, "max": 200, "step": 1,  "display": "input"}),
                 "resize": (["1280", "1024", "768", "Don't"],),
+                "rotate_face": ([
+                    ROTATE_FACE_TYPES['NONE'],
+                    ROTATE_FACE_TYPES['LOSELESS'],
+                    ROTATE_FACE_TYPES['ALWAYS']
+                ],),
                 "offload": ([
                     OFFLOAD_TYPES["NONE"],
                     OFFLOAD_TYPES["BEFORE_DECODING"],
@@ -263,6 +301,7 @@ class GenerationInpaint:
         blur_mask,
         resize,
         offload,
+        rotate_face,
         seed,
         positive = "",
         negative = "",
@@ -270,11 +309,31 @@ class GenerationInpaint:
     ):
         mask_image = tensor_to_numpy(mask)
         pose_image = tensor_to_numpy(image)
+        ip_adapter_scale = ip_adapter_scale / 100
 
-        face_emb = sum(np.array(face_embeds)) / len(face_embeds)
-        ip_adapter_scale /= 100
-        images, position = prepareMaskAndPoseAndControlImage(pose_image, mask_image, insightface, padding, resize)
+        width = pose_image.shape[1]
+        height = pose_image.shape[0]
 
+        face_emb = np.concatenate(face_embeds)
+
+        angle = None
+        if rotate_face != ROTATE_FACE_TYPES['NONE']:
+            p_x1, p_y1, p_x2, p_y2 = getMaskBboxWithPadding(mask_image, padding)
+            im = pose_image[p_y1:p_y2, p_x1:p_x2]
+            kps = getKpsFromImage(im, insightface)
+            angle = getAngle(
+                kps[0], kps[1],
+                round_angle = True if rotate_face == ROTATE_FACE_TYPES['LOSELESS'] else False
+            )
+            debug("face rotation angle: " + str(angle))
+            if angle != 0:
+                pose_image = Image.fromarray(pose_image)
+                pose_image = pose_image.rotate(angle, expand=True, fillcolor=(0,0,0,0))
+                pose_image = np.array(pose_image)
+                mask_image = Image.fromarray(mask_image).rotate(angle, expand=True, fillcolor=(0,))
+                mask_image = np.array(mask_image)
+
+        images, position = prepareMaskAndPoseAndControlImage(pose_image, mask_image, insightface, padding, resize, blur_mask)
         mask_image, ref_image, control_image = images
 
         generator = torch.Generator(device=device).manual_seed(seed)
@@ -284,22 +343,22 @@ class GenerationInpaint:
         if args.preview_method != LatentPreviewMethod.NoPreviews:
             previewer = get_previewer(device, SDXL())
 
-        pbar = comfy.utils.ProgressBar(steps)
+        pbar = comfy.utils.ProgressBar(steps-1)
 
         def progress_fn(_, step, _1, dict):
             preview_bytes = None
             if previewer:
                 preview_bytes = previewer.decode_latent_to_preview_image("JPEG", dict["latents"].float()) # first arg is unused
-            pbar.update_absolute(step + 1, steps, preview_bytes)
+            pbar.update_absolute(step, steps-1, preview_bytes)
             return dict
 
-        if DEBUG: print("Offload type: " + offload)
-        if DEBUG: print("GPU memory before pipe: " + f"{(get_free_memory() / 1024 / 1024):.3f}" + " MB")
+        debug("Offload type: " + offload)
+        debug("GPU memory before pipe: " + f"{(get_free_memory() / 1024 / 1024):.3f}" + " MB")
 
         t1 = perf_counter()
         inpaint_pipe.to(device)
         t2 = perf_counter()
-        if DEBUG:  print("moving pipe to GPU took: " + str(t2 - t1) + " s")
+        debug("moving pipe to GPU took: " + str(t2 - t1) + " s")
 
         latent = inpaint_pipe(
             prompt=positive,
@@ -308,11 +367,12 @@ class GenerationInpaint:
             image_embeds=face_emb,
             control_image=control_image,
             image=ref_image,
+            #TODO control_mask (?)
             mask_image=mask_image,
             controlnet_conditioning_scale=controlnet_conditioning_scale,
             ip_adapter_scale=ip_adapter_scale,
-            strenght=mask_strength,
-            num_inference_steps=steps + 1,
+            strength=mask_strength,
+            num_inference_steps=int(ceil((steps / mask_strength))),
             generator=generator,
             guidance_scale=guidance_scale,
             callback_on_step_end=progress_fn
@@ -326,30 +386,36 @@ class GenerationInpaint:
             inpaint_pipe.text_encoder_2.to("cpu")
             inpaint_pipe.image_proj_model.to("cpu")
             t2 = perf_counter()
-            if DEBUG:  print("moving UNET, CONTROLNET, TEXT_ENCODER, TEXT_ENCODER_2, IMAGE_PROJ_MODEL to CPU took: " + str(t2 - t1) + " s")
+            debug("moving UNET, CONTROLNET, TEXT_ENCODER, TEXT_ENCODER_2, IMAGE_PROJ_MODEL to CPU took: " + str(t2 - t1) + " s")
             torch.cuda.empty_cache()
 
-        print("VAE TYPE: " + str(vae_dtype()))
         face = inpaint_pipe.decodeVae(latent, vae_dtype() == torch.float32)
 
         x, y, w, h = position
 
         resized_face = face.resize((w, h), resample=Image.LANCZOS)
-        mask_blur_offset = int(blur_mask / 4) if blur_mask > 0 else 0
-        resized_mask = mask_image.resize((w - int(blur_mask), h - int(blur_mask)))
-        mask_width_blur = Image.new("RGB", (w, h), (0, 0, 0))
-        mask_width_blur.paste(resized_mask, (mask_blur_offset, mask_blur_offset))
-        mask_width_blur = mask_width_blur.filter(ImageFilter.GaussianBlur(radius = blur_mask))
-        mask_width_blur = mask_width_blur.convert("L")
+        resized_mask = mask_image.resize((w, h))
         pose_image = Image.fromarray(pose_image)
-        pose_image.paste(resized_face, (x, y), mask=mask_width_blur)
+
+        pose_image.paste(resized_face, (x, y), mask=resized_mask)
+
+        if angle is not None:
+            pose_image = pose_image.rotate(-angle, expand=True, fillcolor=(0,0,0,0), resample=Image.BICUBIC)
+            new_width, new_height = pose_image.size
+            # TODO CROP only  the original face and paste it into the original image?
+            pose_image = pose_image.crop(box=(
+                (new_width - width) / 2,
+                (new_height - height) / 2,
+                (new_width - (new_width - width) / 2),
+                (new_height - (new_height - height) / 2)
+            ))
 
         if offload == OFFLOAD_TYPES['AT_THE_END']:
             inpaint_pipe.to("cpu", silence_dtype_warnings=True)
             inpaint_pipe.image_proj_model.to("cpu")
             torch.cuda.empty_cache()
 
-        if DEBUG: print("GPU memory at the end: " + f"{(get_free_memory() / 1024 / 1024):.3f}" + " MB")
+        debug("GPU memory at the end: " + f"{(get_free_memory() / 1024 / 1024):.3f}" + " MB")
         return (image_to_tensor(pose_image),)
 
 NODE_CLASS_MAPPINGS = {

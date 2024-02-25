@@ -1,10 +1,10 @@
-# ComfyUI InstantID Faceswapper v0.0.4
+# ComfyUI InstantID Faceswapper v0.0.5
 <sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Workflow script](#workflow-script-beta) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
 Implementation of [faceswap](https://github.com/nosiu/InstantID-faceswap/tree/main) based on [InstantID](https://github.com/InstantID/InstantID) for ComfyUI. \
 Allows usage of [LCM Lora](https://huggingface.co/latent-consistency/lcm-lora-sdxl) which can produce good results in only a few generation steps.
 </br>
-**Works ONLY with SDXL checkpoints.** (for now?)
+**Works ONLY with SDXL checkpoints.**
 </br>
 </br>
 ![image](https://github.com/nosiu/comfyui-instantId-faceswap/assets/5691179/b69e11cf-ea77-4f41-95cc-c0ea84269e7b)
@@ -78,22 +78,26 @@ Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containin
    - **face_image** - input image from which to extract embed data
    - **face_embed** - face_embed(s)
 
-
 ### Faceswap generate
    Generates new face from input Image based on input mask \
    params:
-   - **padding** - how much the image region sent to the pipeline will be enlarged by mask bbox with padding
-   - **ip_adapter_scale** - strength of ip adapter
-   - **controlnet conditioning scale** - strength of controlnet
+   - **padding** - how much the image region sent to the pipeline will be enlarged by mask bbox with padding.
+   - **ip_adapter_scale** - strength of ip adapter.
+   - **controlnet conditioning scale** - strength of controlnet.
    - **guidance_scale** - guidance scale value encourages the model to generate images closely linked to the text prompt at the expense of lower image quality. Guidance scale is enabled when `guidance_scale` > 1.
    - **steps** - how many steps generation will take
    - **resize** - Maximum value to which the cut region of the image will be scaled. Larger values should yield better results but will be slower. To disable, select `don't`.
-   - **mask_strength** - strength of mask
-   - **blur_mask** - how much blur add to a mask before composing it into the the result picture
-   - **offload** -  if you are experiencing memory issues during the decoding process, this option might help.
-      - **don't** -  do nothing. This is the fastest option and does not move memory.
+   - **mask_strength** - strength of mask.
+   - **blur_mask** - how much blur add to a mask before composing it into the the result picture.
+   - **rotate_face** - This option rotates the image before processing and rotates it back afterward to keep the face straight.
+      - **loseless** - This option rotates the image by multiples of 90 angles (90, 180, 270). You shouldn't lose any quality.
+      - **always** - This option rotates the image by any angle in an attempt to keep the face straight.
+      **Note:** You will lose some quality of the original image.
+      - **don't** - This option does nothing; it won't rotate the image at all.
+   - **offload** - if you are experiencing memory issues during the decoding process, this option might help.
+      - **don't** - do nothing. This is the fastest option and does not move memory.
       - **before decoding** - moves a significant amount of memory from VRAM to RAM to save memory before decoding. Use this option if you are running out of memory after reaching 100% during generation.
-      - **at the end** - Same as **before decoding** and moves the entire pipeline into RAM after decoding. Use this option if you are doing something else besides faceswapping.
+      - **at the end** - same as **before decoding** and moves the entire pipeline into RAM after decoding. Use this option if you are doing something else besides faceswapping.
    - **seed** - seed send to pipeline
    - **control_after_generate** - what to do with seed
    - **positive** - positive prompts
@@ -142,6 +146,12 @@ workflow_generate.py C:\Users\Admin\Desktop\ALBERT albert
 
 ## Changelog
 <sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Workflow script](#workflow-script-beta) | [Tips](#tips) | [Changelog](#changelog)</sub>
+
+- ### 0.0.5 (25.02.2024)
+   - The `mask_strength` parameter has been fixed; it now functions correctly. Previously, it was stuck at *0.9999* regardless of the chosen value.
+   - The `ip_adapter_scale` parameter has been fixed. If you were using the xformers, this parameter could be stuck at *50*.
+   - Changed the method of processing face_embed(s).
+   - Added the `rotate_face` parameter. It will attempt to rotate the image to keep the face straight before processing and rotate it back to the original position afterward.
 
 - ### 0.0.4 (14.02.2024)
    - To save memory, you can run Comfy with the `--fp16-vae` argument to disable the default VAE upcasting to float32.

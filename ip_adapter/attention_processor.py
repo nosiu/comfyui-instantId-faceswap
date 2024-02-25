@@ -10,6 +10,10 @@ try:
 except Exception as e:
     xformers_available = False
 
+class RegionControler(object):
+    def __init__(self) -> None:
+        self.prompt_image_conditioning = []
+region_control = RegionControler()
 
 class AttnProcessor(nn.Module):
     r"""
@@ -22,7 +26,7 @@ class AttnProcessor(nn.Module):
     ):
         super().__init__()
 
-    def __call__(
+    def forward(
         self,
         attn,
         hidden_states,
@@ -81,8 +85,7 @@ class AttnProcessor(nn.Module):
         hidden_states = hidden_states / attn.rescale_output_factor
 
         return hidden_states
-    
-    
+
 class IPAttnProcessor(nn.Module):
     r"""
     Attention processor for IP-Adapater.
@@ -108,7 +111,7 @@ class IPAttnProcessor(nn.Module):
         self.to_k_ip = nn.Linear(cross_attention_dim or hidden_size, hidden_size, bias=False)
         self.to_v_ip = nn.Linear(cross_attention_dim or hidden_size, hidden_size, bias=False)
 
-    def __call__(
+    def forward(
         self,
         attn,
         hidden_states,
@@ -159,20 +162,31 @@ class IPAttnProcessor(nn.Module):
             attention_probs = attn.get_attention_scores(query, key, attention_mask)
             hidden_states = torch.bmm(attention_probs, value)
         hidden_states = attn.batch_to_head_dim(hidden_states)
-        
+
         # for ip-adapter
         ip_key = self.to_k_ip(ip_hidden_states)
         ip_value = self.to_v_ip(ip_hidden_states)
-        
+
         ip_key = attn.head_to_batch_dim(ip_key)
         ip_value = attn.head_to_batch_dim(ip_value)
-        
+
         if xformers_available:
             ip_hidden_states = self._memory_efficient_attention_xformers(query, ip_key, ip_value, None)
         else:
             ip_attention_probs = attn.get_attention_scores(query, ip_key, None)
             ip_hidden_states = torch.bmm(ip_attention_probs, ip_value)
         ip_hidden_states = attn.batch_to_head_dim(ip_hidden_states)
+
+        # region control
+        if len(region_control.prompt_image_conditioning) == 1:
+            region_mask = region_control.prompt_image_conditioning[0].get('region_mask', None)
+            if region_mask is not None:
+                h, w = region_mask.shape[:2]
+                ratio = (h * w / query.shape[1]) ** 0.5
+                mask = F.interpolate(region_mask[None, None], scale_factor=1/ratio, mode='nearest').reshape([1, -1, 1])
+            else:
+                mask = torch.ones_like(ip_hidden_states)
+            ip_hidden_states = ip_hidden_states * mask     
 
         hidden_states = hidden_states + self.scale * ip_hidden_states
 
@@ -215,7 +229,7 @@ class AttnProcessor2_0(torch.nn.Module):
         if not hasattr(F, "scaled_dot_product_attention"):
             raise ImportError("AttnProcessor2_0 requires PyTorch 2.0, to use it, please upgrade PyTorch to 2.0.")
 
-    def __call__(
+    def forward(
         self,
         attn,
         hidden_states,
@@ -317,7 +331,7 @@ class IPAttnProcessor2_0(torch.nn.Module):
         self.to_k_ip = nn.Linear(cross_attention_dim or hidden_size, hidden_size, bias=False)
         self.to_v_ip = nn.Linear(cross_attention_dim or hidden_size, hidden_size, bias=False)
 
-    def __call__(
+    def forward(
         self,
         attn,
         hidden_states,
@@ -401,6 +415,18 @@ class IPAttnProcessor2_0(torch.nn.Module):
 
         ip_hidden_states = ip_hidden_states.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)
         ip_hidden_states = ip_hidden_states.to(query.dtype)
+
+        # region control
+        if len(region_control.prompt_image_conditioning) == 1:
+            region_mask = region_control.prompt_image_conditioning[0].get('region_mask', None)
+            if region_mask is not None:
+                query = query.reshape([-1, query.shape[-2], query.shape[-1]])
+                h, w = region_mask.shape[:2]
+                ratio = (h * w / query.shape[1]) ** 0.5
+                mask = F.interpolate(region_mask[None, None], scale_factor=1/ratio, mode='nearest').reshape([1, -1, 1])
+            else:
+                mask = torch.ones_like(ip_hidden_states)
+            ip_hidden_states = ip_hidden_states * mask
 
         hidden_states = hidden_states + self.scale * ip_hidden_states
 
