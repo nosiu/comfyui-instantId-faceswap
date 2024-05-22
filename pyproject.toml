@@ -1,0 +1,15 @@
+[project]
+name = "comfyui-instantid-faceswap"
+description = "Implementation of [a/faceswap](https://github.com/nosiu/InstantID-faceswap/tree/main) based on [a/InstantID](https://github.com/InstantID/InstantID) for ComfyUI. Allows usage of [a/LCM Lora](https://huggingface.co/latent-consistency/lcm-lora-sdxl) which can produce good results in only a few generation steps.\nNOTE:Works ONLY with SDXL checkpoints."
+version = "1.0.0"
+license = "LICENSE"
+dependencies = ["insightface", "onnxruntime-gpu", "opencv-python", "transformers", "diffusers~=0.26.0", "accelerate", "pillow"]
+
+[project.urls]
+Repository = "https://github.com/nosiu/comfyui-instantId-faceswap"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = ""
+DisplayName = "comfyui-instantId-faceswap"
+Icon = ""
