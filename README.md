@@ -167,7 +167,7 @@ Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containin
    - **resize_mode** - available options:
       - *auto* - automatically calculates the image size so that the area is `width` x ` height`.
          For SDXL, you probably want to use this option with:
-         *width: 1024, height: 1024**
+         **width: 1024, height: 1024**
       - *scale by width* -  ignores provided `height` and calculates it based on the aspect ratio
       - *scale by height* - ignores provided `width` and calculates it based on the aspect ratio
       - *free* - uses the provided `width` and `height`
