@@ -1,18 +1,19 @@
-# ComfyUI InstantID Faceswapper v0.1.0
-<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+# ComfyUI InstantID FaceSwap v0.1.0
+<sub>[About](#comfyui-instantid-faceswap-v010) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
 Implementation of [faceswap](https://github.com/nosiu/InstantID-faceswap/tree/main) based on [InstantID](https://github.com/InstantID/InstantID) for ComfyUI.
 </br>
 **Works ONLY with SDXL checkpoints**
 </br>
 </br>
-![image](https://github.com/nosiu/comfyui-instantId-faceswap/assets/5691179/b69e11cf-ea77-4f41-95cc-c0ea84269e7b)
-![image](https://github.com/nosiu/comfyui-instantId-faceswap/assets/5691179/597a0b1d-21fd-44ac-945a-9df4fd73eda4)
+![image](https://github.com/user-attachments/assets/0c97dccf-ac8a-43f7-b50b-8bbf7ed81049)
+
+![image](https://github.com/user-attachments/assets/bbc88aaf-fba4-43f1-80ea-fece379308db)
 
 
 
 ## Installation guide
-<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+<sub>[About](#comfyui-instantid-faceswap-v010) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
 1. Clone or download this repository and put it into **ComfyUI/custom_nodes**
 2. Open commandline in the  **ComfyUI/custom_nodes/comfyui-instantId-faceswap/** folder and type `pip install -r requirements.txt` to install dependencies
@@ -53,7 +54,7 @@ ComfyUI
 Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containing those files to the config.
 
 ## Custom nodes
-<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+<sub>[About](#comfyui-instantid-faceswap-v010) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
 - ### Load Insightface:
    Loads Insightface. Models need to be in a specific location. Check the  [Installation guide](#installation-guide) for details.
@@ -80,6 +81,10 @@ Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containin
    - **control_net** - instantId Controlnet
    - **strength** - strength of instantId ControlNet
 
+- ### Apply instantId and ControlNet:
+    A subgraph node that bundles several operations into a single node for convenience. It includes the following nodes: LoadInstantIdAdapter, FaceEmbedCombine, ControlNetLoader, InstantIdAdapterApply, and ControlNetInstantIdApply.
+
+    This node streamlines the process by loading the InstantId adapter, combining face embeddings, loading the ControlNet, and applying both the InstantId adapter and ControlNet in one step.
 
 - ### FaceEmbed for instantId
    Prepares face embeds for generation. You can chain multiple face embeds.
@@ -159,8 +164,8 @@ Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containin
    - **insightface** (optional) - loaded insightface
    - **width** - width of the image in pixels (check `resize_mode`)
    - **height** - height of the image in pixels, check `resize_mode`
-   - **resize_mode** - availble options:
-      - *auto* - automatically calculates the image size so that the area is` width` x` height`.
+   - **resize_mode** - available options:
+      - *auto* - automatically calculates the image size so that the area is `width` x ` height`.
          For SDXL, you probably want to use this option with:
          *width: 1024, height: 1024**
       - *scale by width* -  ignores provided `height` and calculates it based on the aspect ratio
@@ -179,7 +184,7 @@ Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containin
    - **pad_left**  -  how many pixels to enlarge the mask to the left
 
 ## Workflows
-<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+<sub>[About](#comfyui-instantid-faceswap-v010) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
 
 You can find example workflows in the `/workflows` folder.
@@ -197,7 +202,7 @@ If you set the mask blur options remember that it will shrink the area you maske
 Face swap: Set your pose image, draw a mask, set your face reference (the face that will replace the masked area in the pose image), and that's it.
 
 ### simple_with_adapter.json
-Same as `simple.json` with an aditional node `Apply instantId adapter`
+Same as `simple.json` with an additional node `Apply instantId adapter`
 
 ### simple_two_embeds.json
 Same as `simple.json`, but allows you to provide two face references. You can use this to merge two different faces or just provide a second reference for the first face.
@@ -205,12 +210,20 @@ Same as `simple.json`, but allows you to provide two face references. You can us
 ### draw_kps.json
 Face swap: Set your pose image, draw a mask, set your face reference (the face that will replace the masked area in the pose image), and then click the "draw KPS" button on the `Draw KPS` node to set your KPS.
 
-** PICTURE HERE ***
+<details>
+  <summary>View Example Image</summary
+                                 
+  ![DRAW KPS](https://github.com/user-attachments/assets/9c87fa80-bb51-4df5-aca8-8cfee3d1668b)
+</details>
 
 ### draw_kps_rotate.json
 Same as `draw_kps.json`, but it will also rotate the pose image. After setting your KPS, you should set the angle by which you want to rotate the image to align the face properly.
 
-** PICTURE HERE ***
+<details>
+  <summary>View Example Image</summary
+                                 
+  ![KPS SET ANGLE](https://github.com/user-attachments/assets/665dbfdd-79ce-47a0-9004-40c0cf48596c)
+</details>
 
 ### auto_rotate.json
 Same as `simple_with_adapter.json`, but it will automatically detect the angle of rotation based on the mask and padding set in the `Get Angle from Face` node.
@@ -219,24 +232,36 @@ Same as `simple_with_adapter.json`, but it will automatically detect the angle o
 Generates an image based only on the face reference and prompts. Set your face reference, draw the KPS where the face should be drawn, and add prompts like "man sitting in the park."
 
 ### promp2image_detail_pass.json
-Same as `prompt2image.json`, but this one expects the KPS you draw to be very small, so the face is not detailed (or may even be deformed). Draw a mask on the `Draw KPS` node (on the KPS and surrounding area), and
+Same as `prompt2image.json`, but this one expects the KPS you draw to be very small, so the face is not detailed (or may even be deformed). Draw a mask on the `Draw KPS` node (on the KPS and surrounding area), and it will perform the face swap in that region.
 
-** PICTURE HERE ***
-
-it will perform the face swap in that region.
+<details>
+  <summary>View Example Image</summary>
+    
+  ![MASK KPS](https://github.com/user-attachments/assets/2c5e78ed-b1e7-497e-b9d7-4969984afeca)
+</details>
 
 ### prompts2img_2faces_enhancement.json
 A workflow that generates two faces in one image and enhances them one by one.
 Set your face references and KPS for one image, then set a second KPS in another region of the picture. Afterward, mask both KPS. Good results depend on your prompts.
 
+<details>
+  <summary>View Example Image</summary>
+    
+  ![Two KPS one flow](https://github.com/user-attachments/assets/fbaa38df-3400-401d-b644-087723e6488c)
+</details>
+
 ### inpaint.json
 Since you can use the `Preprocess Image for InstantId` and `Preprocess Image for InstantId (Advanced)` nodes to resize your images with a mask, this workflow is useful for inpainting in general. This workflow shows you how to do it.
 
-** PICTURE HERE ***
+<details>
+  <summary>View Example Image</summary>
+    
+  ![basic inpaint](https://github.com/user-attachments/assets/bda258b1-a988-47f5-beb6-105289c990ac)
 
+</details>
 
 ## Tips
-<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+<sub>[About](#comfyui-instantid-faceswap-v010) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
 - Most workflows require you to draw a mask on the pose image.
 - If you encounter the error `No face detected in pose image`, try drawing a larger mask or increasing the `pad` parameter or draw KPS yourself.
@@ -246,7 +271,7 @@ Since you can use the `Preprocess Image for InstantId` and `Preprocess Image for
 - To understand the relationship between ControlNet and the adapter, check the official paper linked in the instantId repository: https://github.com/instantX-research/InstantID?tab=readme-ov-file
 
 ## Changelog
-<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+<sub>[About](#comfyui-instantid-faceswap-v010) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
 
 - ### 0.1.0 (20.10.2024)
