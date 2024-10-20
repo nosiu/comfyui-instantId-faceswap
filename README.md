@@ -1,10 +1,9 @@
-# ComfyUI InstantID Faceswapper v0.0.5
-<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Workflow script](#workflow-script-beta) | [Tips](#tips) | [Changelog](#changelog)</sub>
+# ComfyUI InstantID Faceswapper v0.1.0
+<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
-Implementation of [faceswap](https://github.com/nosiu/InstantID-faceswap/tree/main) based on [InstantID](https://github.com/InstantID/InstantID) for ComfyUI. \
-Allows usage of [LCM Lora](https://huggingface.co/latent-consistency/lcm-lora-sdxl) which can produce good results in only a few generation steps.
+Implementation of [faceswap](https://github.com/nosiu/InstantID-faceswap/tree/main) based on [InstantID](https://github.com/InstantID/InstantID) for ComfyUI.
 </br>
-**Works ONLY with SDXL checkpoints.**
+**Works ONLY with SDXL checkpoints**
 </br>
 </br>
 ![image](https://github.com/nosiu/comfyui-instantId-faceswap/assets/5691179/b69e11cf-ea77-4f41-95cc-c0ea84269e7b)
@@ -13,7 +12,7 @@ Allows usage of [LCM Lora](https://huggingface.co/latent-consistency/lcm-lora-sd
 
 
 ## Installation guide
-<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Workflow script](#workflow-script-beta) | [Tips](#tips) | [Changelog](#changelog)</sub>
+<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
 1. Clone or download this repository and put it into **ComfyUI/custom_nodes**
 2. Open commandline in the  **ComfyUI/custom_nodes/comfyui-instantId-faceswap/** folder and type `pip install -r requirements.txt` to install dependencies
@@ -28,11 +27,7 @@ Allows usage of [LCM Lora](https://huggingface.co/latent-consistency/lcm-lora-sd
 
     - [IpAdapter and ControlNet](https://huggingface.co/InstantX/InstantID/tree/main)
        - ip-adapter.bin - put it into **ComfyUI/models/ipadapter**
-       - ControlNetModel/diffusion_pytorch_model.safetensors - put it into **ComfyUI/models/controlnet/ControlNetModel**
-       - ControlNetModel/config.json - put it into **ComfyUI/models/controlnet/ControlNetModel**
-
-    - [LCM Lora](https://huggingface.co/latent-consistency/lcm-lora-sdxl/tree/main) *Optional (but higly recomended)
-       - pytorch_lora_weights.safetensors - put it into **ComfyUI/models/loras**
+       - ControlNetModel/diffusion_pytorch_model.safetensors and ControlNetModel/config.json  - put those files in new folder in  **ComfyUI/models/controlnet**
 
 Newly added files hierarchy should look like this:
 ```
@@ -41,7 +36,7 @@ ComfyUI
     \---ipadapter
            ipadapter.bin
     \---controlnet
-        \---ControlNetModel
+        \--- FOLDER_YOU_CREATED
               config.json
               diffusion_pytorch_model.safetensors
     \---insightface
@@ -54,98 +49,215 @@ ComfyUI
                   scrfd_10g_bnkps.onnx
 ```
 
-*Note You don't need to add the 'ipadapter', 'controlnet', and 'lora' folders to this specific location if you already have them somewhere else.
+*Note You don't need to add the 'ipadapter', and 'controlnet' folders to this specific location if you already have them somewhere else (also you can rename ipadapter.bin and ControlNetModel to something of your liking).
 Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containing those files to the config.
 
 ## Custom nodes
-<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Workflow script](#workflow-script-beta) | [Tips](#tips) | [Changelog](#changelog)</sub>
+<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
-### Faceswap LCM Lora
-   params:
-   - **lcm_lora** - path to your LCM lora inside the folder with Loras
+- ### Load Insightface:
+   Loads Insightface. Models need to be in a specific location. Check the  [Installation guide](#installation-guide) for details.
 
-### Faceswap setup
-   Loads everything and sets up the pipeline \
-   params:
-   - **checkpoint** - your SDXL checkpoint (do not use checkpoints for inpainting!)
-   - **controlnet** - folder where your ControlNetModel is located
-   - **controlnet_name** - folder with ControlNetModel if you renamed the original folder then type a new name here if you followed the instructions then leave "/ControlNetModel"
-   - **ipadapter** - ip adapter from the instruction
+- ### Load instantId adapter:
+   Loads the InstantId adapter and resampler. The model needs to be in a specific location. Check the [Installation guide](#installation-guide) for details. The resampler is used to prepare face embeds for ControlNet and the adapter.
 
-### Faceswap face embed
-   Prepares face embeds for the generation, you can chain face embeds to improve results \
-   params:
+- ### Apply instantId adapter:
+   Applies the InstantId adapter to the model. This is optional—you can achieve good results without using this node.
+
+   **Params:**
+   - **checkpoint** - SDXL checkpoint
+   - **instantId_adapter** - intantId adapter
+   - **face_conditioning** - face conditioning prepared by the resampler
+   - **strength** - strength of the instantId adapter
+
+- ### Apply instantId ControlNet:
+   Applies InstantId ControlNet.
+
+   **Params:**
+   - **positive**  - positive prompts
+   - **negative**  - negative prompts
+   - **face_conditioning** - face conditioning prepared by the resampler
+   - **control_net** - instantId Controlnet
+   - **strength** - strength of instantId ControlNet
+
+
+- ### FaceEmbed for instantId
+   Prepares face embeds for generation. You can chain multiple face embeds.
+
+   **Params:**
+   - **insightface** - insightface
    - **face_image** - input image from which to extract embed data
-   - **face_embed** - face_embed(s)
+   - **face_embeds** (*optional*) - additional face embed(s)
 
-### Faceswap generate
-   Generates new face from input Image based on input mask \
-   params:
-   - **padding** - how much the image region sent to the pipeline will be enlarged by mask bbox with padding.
-   - **ip_adapter_scale** - strength of ip adapter.
-   - **controlnet conditioning scale** - strength of controlnet.
-   - **guidance_scale** - guidance scale value encourages the model to generate images closely linked to the text prompt at the expense of lower image quality. Guidance scale is enabled when `guidance_scale` > 1.
-   - **steps** - how many steps generation will take
-   - **resize** - Maximum value to which the cut region of the image will be scaled. Larger values should yield better results but will be slower. To disable, select `don't`.
-   - **mask_strength** - strength of mask.
-   - **blur_mask** - how much blur add to a mask before composing it into the the result picture.
-   - **rotate_face** - This option rotates the image before processing and rotates it back afterward to keep the face straight.
-      - **loseless** - This option rotates the image by multiples of 90 angles (90, 180, 270). You shouldn't lose any quality.
-      - **always** - This option rotates the image by any angle in an attempt to keep the face straight.
-      **Note:** You will lose some quality of the original image.
-      - **don't** - This option does nothing; it won't rotate the image at all.
-   - **offload** - if you are experiencing memory issues during the decoding process, this option might help.
-      - **don't** - do nothing. This is the fastest option and does not move memory.
-      - **before decoding** - moves a significant amount of memory from VRAM to RAM to save memory before decoding. Use this option if you are running out of memory after reaching 100% during generation.
-      - **at the end** - same as **before decoding** and moves the entire pipeline into RAM after decoding. Use this option if you are doing something else besides faceswapping.
-   - **seed** - seed send to pipeline
-   - **control_after_generate** - what to do with seed
-   - **positive** - positive prompts
-   - **negative** - negative prompts, works only when `guidance_scale` > 1
-   - **negative2** - negative prompts
+- ### FaceEmbed Combine
+   Prepares face embeds for ControlNet and the adapter.
+
+   **Params:**
+   - **resampler** - resampler
+   - **face_embeds** - face_embeds
+
+- ### Get Angle from face
+   Returns the angle (in degrees) by which the image must be rotated counterclockwise to align the face. Since there can be more than one face in the image, face search is performed only in the area of the drawn mask, enlarged by the pad parameter.
+
+   **Note:** If the face is rotated by an extreme angle, insightface won't be able to find the correct position of face keypoints, so the rotation angle might not always be accurate. In these cases, manually draw your own KPS.
+
+
+   **Params:**
+   - **insightface** - insightface
+   - **image** - image with the face to rotate
+   - **mask** - mask
+   - **rotate_mode** - available options:
+      - *none* - returns 0
+      - *loseless* - returns the closest angle to 90, 180, 270 degrees
+      - *any* - returns a specific angle by which the image should be rotated
+   - **pad_top** - how many pixels to enlarge the mask upwards
+   - **pad_right** - how many pixels to enlarge the mask to the right
+   - **pad_bottom** - how many pixels to enlarge the mask downwards
+   - **pad_left**  -  how many pixels to enlarge the mask to the left
+
+- ### Rotate Image
+   Rotates the image by the given angle and expands it.
+
+   **Params:**
+  - **image** - image
+  - **angle** - angle
+  - **counter_clockwise** - direction
+
+- ### Remove rotation padding
+   Removes the expanded region added by two rotations (first to align the face, and second to return to the original position).
+
+   **Params:**
+  - **original_image** - image before rotation
+  - **rotated_image** - rotated image
+
+- ### Draw KPS
+   Allows you to draw your own keypoints (KPS), useful when you get the error `"No face detected in pose image"` or when using InstantId to generate images from prompts only. Click and drag the KPS to move them around.
+
+   When you place your KPS in the desired position, this node will show the angle by which the image should be rotated to align the face.
+
+   **Shortcuts:**\
+      **CTRL + DRAG** - move around\
+      **CTRL + WHEEL** - zoom in / out\
+      **ALT + WHEEL** - decrease / increase distance of other points from blue point (nose kps)
+
+   **Params:**
+   - **image_reference** (optional) - an image that serves as a background to more accurately match the appropriate points. If provided, the resulting image will have the width and height of this image.
+   - **width** - width of the image (disabled if `image_reference` is provided)
+   - **height** - height of the image (disabled if `image_reference` is provided)
+
+
+- ### Preprocess image for instantId:
+   Cuts out the mask area wrapped in a square, enlarges it in each direction by the `pad` parameter, and resizes it (to dimensions rounded down to multiples of 8). It also creates a control image for InstantId ControlNet.
+
+   **Note:** If the face is rotated by an extreme angle, the prepared `control_image` may be drawn incorrectly.
+
+   If the `insightface` param is not provided, it will not create a control image, and you can use this node as a regular node for inpainting (to cut the masked region with padding and later compose it).
+
+   **Params:**
+   - **image** - your pose image (the image in which the face will be swapped)
+   - **mask** - drawn mask (the area to be changed must contain the face; you can also mask other features like hair or hats and change them later with prompts)
+   - **insightface** (optional) - loaded insightface
+   - **width** - width of the image in pixels (check `resize_mode`)
+   - **height** - height of the image in pixels, check `resize_mode`
+   - **resize_mode** - availble options:
+      - *auto* - automatically calculates the image size so that the area is` width` x` height`.
+         For SDXL, you probably want to use this option with:
+         *width: 1024, height: 1024**
+      - *scale by width* -  ignores provided `height` and calculates it based on the aspect ratio
+      - *scale by height* - ignores provided `width` and calculates it based on the aspect ratio
+      - *free* - uses the provided `width` and `height`
+   - **pad** - how many pixels to enlarge the mask in each direction
+
+- ### Preprocess image for instantId (Advanced):
+   Same as **Preprocess Image for InstantId** with five additional parameters.
+
+   **Params:**
+   - **upscale_method**  - *nearest-exact*, *bilinear*, *area*, *bicubic*, *lanczos*
+   - **pad_top** - how many pixels to enlarge the mask upwards
+   - **pad_right** - how many pixels to enlarge the mask to the right
+   - **pad_bottom** - how many pixels to enlarge the mask downwards
+   - **pad_left**  -  how many pixels to enlarge the mask to the left
 
 ## Workflows
-<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Workflow script](#workflow-script-beta) | [Tips](#tips) | [Changelog](#changelog)</sub>
+<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
-You can find example workflows in the /workflows folder.
 
-## Workflow script (beta)
-<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Workflow script](#workflow-script-beta) | [Tips](#tips) | [Changelog](#changelog)</sub>
+You can find example workflows in the `/workflows` folder.
+Nodes colors legend: \
+**yellow** - node from this extension,\
+**blue** - inputs, load your controlnets, models, images ...\
+**purple** - you might want to configure those\
+**cyan** - output images\
+**green** - positive prompts\
+**red** - negative prompts
 
-The simple script, `workflow_generate.py`, can generate workflows based on the face images contained in a specific folder. The script will automatically generate appropriate nodes and connect them together. Keep in mind that there is no validation to check if there is a face in the image.
+If you set the mask blur options remember that it will shrink the area you masked
 
-You can copy the `workflow_generate.py` script anywhere you want for easier access; it has no dependencies inside the custom_node.
+### simple.json
+Face swap: Set your pose image, draw a mask, set your face reference (the face that will replace the masked area in the pose image), and that's it.
 
-Only files with extensions: jpg, jpeg, bmp, png, gif, webp, and jiff will be included in the workflow.
+### simple_with_adapter.json
+Same as `simple.json` with an aditional node `Apply instantId adapter`
 
-The script will not upload reference images into the `ComfyUI/input` folder. As a result, **you won't be able to preview those images.**
+### simple_two_embeds.json
+Same as `simple.json`, but allows you to provide two face references. You can use this to merge two different faces or just provide a second reference for the first face.
 
-If you move, rename, delete image files, or modify paths in any way, the workflow will stop working.
+### draw_kps.json
+Face swap: Set your pose image, draw a mask, set your face reference (the face that will replace the masked area in the pose image), and then click the "draw KPS" button on the `Draw KPS` node to set your KPS.
 
-**You may see warnings (errors) in the console while loading generated workflows, ignore those.**
-### Usage
-arguments:
-- input folder absolute path
-- (optional) output workflow file name (default: "workflow")
+** PICTURE HERE ***
 
-### Example
-This command will generate 'albert.json' workflow, which should include all the required nodes for face reference images in the 'C:\Users\Admin\Desktop\ALBERT' folder.
+### draw_kps_rotate.json
+Same as `draw_kps.json`, but it will also rotate the pose image. After setting your KPS, you should set the angle by which you want to rotate the image to align the face properly.
 
-```
-workflow_generate.py C:\Users\Admin\Desktop\ALBERT albert
-```
-![image](https://github.com/nosiu/comfyui-instantId-faceswap/assets/5691179/1b0f0306-5207-4447-9844-d148aa234450)
+** PICTURE HERE ***
+
+### auto_rotate.json
+Same as `simple_with_adapter.json`, but it will automatically detect the angle of rotation based on the mask and padding set in the `Get Angle from Face` node.
+
+### promp2image.json
+Generates an image based only on the face reference and prompts. Set your face reference, draw the KPS where the face should be drawn, and add prompts like "man sitting in the park."
+
+### promp2image_detail_pass.json
+Same as `prompt2image.json`, but this one expects the KPS you draw to be very small, so the face is not detailed (or may even be deformed). Draw a mask on the `Draw KPS` node (on the KPS and surrounding area), and
+
+** PICTURE HERE ***
+
+it will perform the face swap in that region.
+
+### prompts2img_2faces_enhancement.json
+A workflow that generates two faces in one image and enhances them one by one.
+Set your face references and KPS for one image, then set a second KPS in another region of the picture. Afterward, mask both KPS. Good results depend on your prompts.
+
+### inpaint.json
+Since you can use the `Preprocess Image for InstantId` and `Preprocess Image for InstantId (Advanced)` nodes to resize your images with a mask, this workflow is useful for inpainting in general. This workflow shows you how to do it.
+
+** PICTURE HERE ***
+
 
 ## Tips
-<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Workflow script](#workflow-script-beta) | [Tips](#tips) | [Changelog](#changelog)</sub>
+<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
-- If instead of face you are getting artifacts try using **resize** option with a high value if that doesn't help, try reducing the **padding** parameter.
-- By using LCM lora you can generate good images in 2-3 steps (10+ otherwise).
-- If the result is too different in color from the original, try reducing the number of steps and/or the ip_adapter_scale value.
-- If you get `No face detected in pose image` error try to increase padding. It means the current mask + padding is not enough to detect the face in the input image by insightface.
+- Most workflows require you to draw a mask on the pose image.
+- If you encounter the error `No face detected in pose image`, try drawing a larger mask or increasing the `pad` parameter or draw KPS yourself.
+- You can modify more than just the face — add accessories like a hat, change hair, or even alter expressions.
+- If you're changing a lot of elements unrelated to the face, it's a good idea to add a second pass focused primarily on the face area to enhance detail.
+- To improve results, you can integrate other extensions such as ControlNet for inpainting, Fooocus inpaint, FaceShaper, Expression Lora, and many more.
+- To understand the relationship between ControlNet and the adapter, check the official paper linked in the instantId repository: https://github.com/instantX-research/InstantID?tab=readme-ov-file
 
 ## Changelog
-<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Workflow script](#workflow-script-beta) | [Tips](#tips) | [Changelog](#changelog)</sub>
+<sub>[About](#comfyui-instantid-faceswapper) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+
+
+- ### 0.1.0 (20.10.2024)
+   - The code was rewritten from scratch and now uses the ComfyUI backend. This allows you to chain LORAs or ControlNets as needed, providing greater control over the entire process.
+For example, you can now draw your own KPS, enabling both text-to-image and image-to-image generation.
+   - Removed most dependencies (including Diffusers).
+   - Removed all old nodes and introduced new ones.
+   - The script that automatically generated workflows based on all faces in a specific catalog has been removed.
+
+   **Note:** Old workflows will not work with this version.
+
 
 - ### 0.0.5 (25.02.2024)
    - The `mask_strength` parameter has been fixed; it now functions correctly. Previously, it was stuck at *0.9999* regardless of the chosen value.
