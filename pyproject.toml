@@ -1,0 +1,14 @@
+[project]
+name = "comfyui-instantid-faceswap"
+description = "Implementation of [a/faceswap](https://github.com/nosiu/InstantID-faceswap/tree/main) based on [a/InstantID](https://github.com/InstantID/InstantID) for ComfyUI."
+version = "0.1.0"
+license = { file = "LICENSE.txt" }
+dependencies = ["insightface", "onnxruntime-gpu"]
+
+[project.urls]
+Repository = "https://github.com/nosiu/comfyui-instantId-faceswap"
+
+[tool.comfy]
+PublisherId = "nosiu"
+DisplayName = "comfyui-instantId-faceswap"
+Icon = ""
