@@ -1,14 +1,14 @@
 {
-  "last_node_id": 801,
-  "last_link_id": 1913,
+  "last_node_id": 803,
+  "last_link_id": 1917,
   "nodes": [
     {
       "id": 636,
       "type": "ControlNetLoader",
-      "pos": [
-        -981,
-        -259
-      ],
+      "pos": {
+        "0": -981,
+        "1": -259
+      },
       "size": {
         "0": 315,
         "1": 58
@@ -16,6 +16,7 @@
       "flags": {},
       "order": 0,
       "mode": 0,
+      "inputs": [],
       "outputs": [
         {
           "name": "CONTROL_NET",
@@ -39,10 +40,10 @@
     {
       "id": 650,
       "type": "LoadInsightface",
-      "pos": [
-        -975,
-        -570
-      ],
+      "pos": {
+        "0": -975,
+        "1": -570
+      },
       "size": {
         "0": 308.15679931640625,
         "1": 26
@@ -52,6 +53,7 @@
       },
       "order": 1,
       "mode": 0,
+      "inputs": [],
       "outputs": [
         {
           "name": "insightface",
@@ -66,16 +68,17 @@
       "properties": {
         "Node name for S&R": "LoadInsightface"
       },
+      "widgets_values": [],
       "color": "#432",
       "bgcolor": "#653"
     },
     {
       "id": 642,
       "type": "FaceEmbed",
-      "pos": [
-        -549,
-        -384
-      ],
+      "pos": {
+        "0": -549,
+        "1": -384
+      },
       "size": {
         "0": 292.20001220703125,
         "1": 66
@@ -83,7 +86,7 @@
       "flags": {
         "collapsed": true
       },
-      "order": 12,
+      "order": 7,
       "mode": 0,
       "inputs": [
         {
@@ -99,7 +102,8 @@
         {
           "name": "face_embeds",
           "type": "FACE_EMBED",
-          "link": null
+          "link": null,
+          "shape": 7
         }
       ],
       "outputs": [
@@ -116,22 +120,23 @@
       "properties": {
         "Node name for S&R": "FaceEmbed"
       },
+      "widgets_values": [],
       "color": "#432",
       "bgcolor": "#653"
     },
     {
       "id": 797,
       "type": "Reroute",
-      "pos": [
-        -181,
-        -270
-      ],
+      "pos": {
+        "0": -181,
+        "1": -270
+      },
       "size": [
         75,
         26
       ],
       "flags": {},
-      "order": 16,
+      "order": 17,
       "mode": 0,
       "inputs": [
         {
@@ -157,10 +162,10 @@
     {
       "id": 796,
       "type": "FaceEmbedCombine",
-      "pos": [
-        -545,
-        -85
-      ],
+      "pos": {
+        "0": -545,
+        "1": -85
+      },
       "size": {
         "0": 367.79998779296875,
         "1": 46
@@ -168,7 +173,7 @@
       "flags": {
         "collapsed": true
       },
-      "order": 14,
+      "order": 13,
       "mode": 0,
       "inputs": [
         {
@@ -197,61 +202,23 @@
       "properties": {
         "Node name for S&R": "FaceEmbedCombine"
       },
+      "widgets_values": [],
       "color": "#432",
       "bgcolor": "#653"
     },
     {
-      "id": 679,
-      "type": "PrimitiveNode",
-      "pos": [
-        -550,
-        -21
-      ],
-      "size": {
-        "0": 210,
-        "1": 82
-      },
-      "flags": {},
-      "order": 2,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "INT",
-          "type": "INT",
-          "links": [
-            1576,
-            1579
-          ],
-          "slot_index": 0,
-          "widget": {
-            "name": "height"
-          }
-        }
-      ],
-      "title": "IMAGE HEIGHT",
-      "properties": {
-        "Run widget replace on values": false
-      },
-      "widgets_values": [
-        1024,
-        "fixed"
-      ],
-      "color": "#323",
-      "bgcolor": "#535"
-    },
-    {
       "id": 798,
       "type": "Reroute",
-      "pos": [
-        -233,
-        -459
-      ],
+      "pos": {
+        "0": -233,
+        "1": -459
+      },
       "size": [
         75,
         26
       ],
       "flags": {},
-      "order": 10,
+      "order": 11,
       "mode": 0,
       "inputs": [
         {
@@ -278,16 +245,16 @@
     {
       "id": 799,
       "type": "Reroute",
-      "pos": [
-        1300,
-        -108
-      ],
+      "pos": {
+        "0": 1300,
+        "1": -108
+      },
       "size": [
         75,
         26
       ],
       "flags": {},
-      "order": 11,
+      "order": 12,
       "mode": 0,
       "inputs": [
         {
@@ -314,16 +281,16 @@
     {
       "id": 800,
       "type": "PreviewImage",
-      "pos": [
-        1412,
-        -212
-      ],
+      "pos": {
+        "0": 1412,
+        "1": -212
+      },
       "size": {
         "0": 429.5522155761719,
         "1": 367.1863708496094
       },
       "flags": {},
-      "order": 21,
+      "order": 22,
       "mode": 0,
       "inputs": [
         {
@@ -332,19 +299,21 @@
           "link": 1908
         }
       ],
+      "outputs": [],
       "properties": {
         "Node name for S&R": "PreviewImage"
       },
+      "widgets_values": [],
       "color": "#233",
       "bgcolor": "#355"
     },
     {
       "id": 248,
       "type": "VAEDecode",
-      "pos": [
-        1352,
-        -301
-      ],
+      "pos": {
+        "0": 1352,
+        "1": -301
+      },
       "size": {
         "0": 140,
         "1": 46
@@ -352,7 +321,7 @@
       "flags": {
         "collapsed": true
       },
-      "order": 20,
+      "order": 21,
       "mode": 0,
       "inputs": [
         {
@@ -379,21 +348,22 @@
       ],
       "properties": {
         "Node name for S&R": "VAEDecode"
-      }
+      },
+      "widgets_values": []
     },
     {
       "id": 793,
       "type": "InstantIdAdapterApply",
-      "pos": [
-        -214,
-        -154
-      ],
+      "pos": {
+        "0": -214,
+        "1": -154
+      },
       "size": {
         "0": 315,
         "1": 98
       },
       "flags": {},
-      "order": 15,
+      "order": 16,
       "mode": 0,
       "inputs": [
         {
@@ -435,16 +405,16 @@
     {
       "id": 775,
       "type": "ControlNetInstantIdApply",
-      "pos": [
-        541,
-        -310
-      ],
+      "pos": {
+        "0": 541,
+        "1": -310
+      },
       "size": {
         "0": 330,
         "1": 138
       },
       "flags": {},
-      "order": 18,
+      "order": 19,
       "mode": 0,
       "inputs": [
         {
@@ -470,7 +440,7 @@
         {
           "name": "image",
           "type": "IMAGE",
-          "link": 1803
+          "link": 1917
         }
       ],
       "outputs": [
@@ -503,17 +473,18 @@
     {
       "id": 774,
       "type": "LoadInstantIdAdapter",
-      "pos": [
-        -979,
-        -451
-      ],
+      "pos": {
+        "0": -979,
+        "1": -451
+      },
       "size": {
         "0": 315,
         "1": 78
       },
       "flags": {},
-      "order": 3,
+      "order": 2,
       "mode": 0,
+      "inputs": [],
       "outputs": [
         {
           "name": "InstantId_adapter",
@@ -544,57 +515,18 @@
       "bgcolor": "#653"
     },
     {
-      "id": 680,
-      "type": "PrimitiveNode",
-      "pos": [
-        -548,
-        111
-      ],
-      "size": {
-        "0": 210,
-        "1": 82
-      },
-      "flags": {},
-      "order": 4,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "INT",
-          "type": "INT",
-          "links": [
-            1577,
-            1578
-          ],
-          "slot_index": 0,
-          "widget": {
-            "name": "width"
-          }
-        }
-      ],
-      "title": "IMAGE WIDTH",
-      "properties": {
-        "Run widget replace on values": false
-      },
-      "widgets_values": [
-        1024,
-        "fixed"
-      ],
-      "color": "#323",
-      "bgcolor": "#535"
-    },
-    {
       "id": 801,
       "type": "Reroute",
-      "pos": [
-        150,
-        -329
-      ],
+      "pos": {
+        "0": 150,
+        "1": -329
+      },
       "size": [
         75,
         26
       ],
       "flags": {},
-      "order": 17,
+      "order": 18,
       "mode": 0,
       "inputs": [
         {
@@ -621,10 +553,10 @@
     {
       "id": 287,
       "type": "CLIPTextEncode",
-      "pos": [
-        170,
-        -134
-      ],
+      "pos": {
+        "0": 170,
+        "1": -134
+      },
       "size": {
         "0": 323.7601013183594,
         "1": 111.55984497070312
@@ -632,7 +564,7 @@
       "flags": {
         "collapsed": false
       },
-      "order": 9,
+      "order": 10,
       "mode": 0,
       "inputs": [
         {
@@ -663,86 +595,18 @@
       "bgcolor": "#533"
     },
     {
-      "id": 678,
-      "type": "KpsMaker",
-      "pos": [
-        -147,
-        -737
-      ],
-      "size": {
-        "0": 245.1999969482422,
-        "1": 358
-      },
-      "flags": {},
-      "order": 8,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "image_reference",
-          "type": "IMAGE",
-          "link": null
-        },
-        {
-          "name": "width",
-          "type": "INT",
-          "link": 1578,
-          "widget": {
-            "name": "width"
-          }
-        },
-        {
-          "name": "height",
-          "type": "INT",
-          "link": 1579,
-          "widget": {
-            "name": "height"
-          }
-        }
-      ],
-      "outputs": [
-        {
-          "name": "control_image",
-          "type": "IMAGE",
-          "links": [
-            1803
-          ],
-          "slot_index": 0,
-          "shape": 3
-        },
-        {
-          "name": "mask",
-          "type": "MASK",
-          "links": [],
-          "slot_index": 1,
-          "shape": 3
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "KpsMaker"
-      },
-      "widgets_values": [
-        "fs-53379172.399999976.png",
-        1024,
-        1024,
-        1.3322198538696393,
-        ""
-      ],
-      "color": "#432",
-      "bgcolor": "#653"
-    },
-    {
       "id": 359,
       "type": "KSampler",
-      "pos": [
-        1002,
-        -330
-      ],
+      "pos": {
+        "0": 1002,
+        "1": -330
+      },
       "size": {
         "0": 316.94384765625,
         "1": 486.80694580078125
       },
       "flags": {},
-      "order": 19,
+      "order": 20,
       "mode": 0,
       "inputs": [
         {
@@ -781,7 +645,7 @@
         "Node name for S&R": "KSampler"
       },
       "widgets_values": [
-        665082108504824,
+        779827001617899,
         "randomize",
         30,
         3,
@@ -795,10 +659,10 @@
     {
       "id": 252,
       "type": "CLIPTextEncode",
-      "pos": [
-        170,
-        -457
-      ],
+      "pos": {
+        "0": 170,
+        "1": -457
+      },
       "size": {
         "0": 321.2493896484375,
         "1": 112.86385345458984
@@ -806,7 +670,7 @@
       "flags": {
         "collapsed": false
       },
-      "order": 13,
+      "order": 15,
       "mode": 0,
       "inputs": [
         {
@@ -837,19 +701,300 @@
       "bgcolor": "#353"
     },
     {
+      "id": 641,
+      "type": "LoadImage",
+      "pos": {
+        "0": -578,
+        "1": -753
+      },
+      "size": {
+        "0": 235.36587524414062,
+        "1": 314
+      },
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            1460
+          ],
+          "slot_index": 0,
+          "shape": 3
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null,
+          "shape": 3
+        }
+      ],
+      "title": "Load face Referecnce",
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "han3.jpg",
+        "image"
+      ],
+      "color": "#223",
+      "bgcolor": "#335"
+    },
+    {
+      "id": 677,
+      "type": "EmptyLatentImage",
+      "pos": {
+        "0": 605,
+        "1": 72
+      },
+      "size": {
+        "0": 315,
+        "1": 106
+      },
+      "flags": {
+        "collapsed": true
+      },
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "height",
+          "type": "INT",
+          "link": 1576,
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "link": 1577,
+          "widget": {
+            "name": "width"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            1574
+          ],
+          "slot_index": 0,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EmptyLatentImage"
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        1
+      ]
+    },
+    {
+      "id": 679,
+      "type": "PrimitiveNode",
+      "pos": {
+        "0": -550,
+        "1": -21
+      },
+      "size": [
+        210,
+        82
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            1576,
+            1914
+          ],
+          "slot_index": 0,
+          "widget": {
+            "name": "height"
+          }
+        }
+      ],
+      "title": "IMAGE HEIGHT",
+      "properties": {
+        "Run widget replace on values": false
+      },
+      "widgets_values": [
+        1024,
+        "fixed"
+      ],
+      "color": "#323",
+      "bgcolor": "#535"
+    },
+    {
+      "id": 680,
+      "type": "PrimitiveNode",
+      "pos": {
+        "0": -548,
+        "1": 111
+      },
+      "size": [
+        210,
+        82
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            1577,
+            1915
+          ],
+          "slot_index": 0,
+          "widget": {
+            "name": "width"
+          }
+        }
+      ],
+      "title": "IMAGE WIDTH",
+      "properties": {
+        "Run widget replace on values": false
+      },
+      "widgets_values": [
+        1024,
+        "fixed"
+      ],
+      "color": "#323",
+      "bgcolor": "#535"
+    },
+    {
+      "id": 802,
+      "type": "KpsDraw",
+      "pos": {
+        "0": -140,
+        "1": -729
+      },
+      "size": [
+        216.91129927847646,
+        316.08614490773033
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image_reference",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "link": 1915,
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "link": 1914,
+          "widget": {
+            "name": "height"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "kps_data",
+          "type": "KPS_DATA",
+          "links": [
+            1916
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KpsDraw"
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        {
+          "array": [
+            [
+              451.9881180877503,
+              286.5507921824582
+            ],
+            [
+              560.6024111601599,
+              286.55079218245834
+            ],
+            [
+              506.29526462395495,
+              340.85793871866235
+            ],
+            [
+              451.9881180877503,
+              395.1650852548673
+            ],
+            [
+              560.6024111601594,
+              395.1650852548666
+            ]
+          ],
+          "opacities": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "width": 1024,
+          "height": 1024,
+          "bbox": [
+            [
+              416,
+              251
+            ],
+            [
+              597,
+              432
+            ]
+          ]
+        },
+        5.997162807380019e-14,
+        ""
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
       "id": 794,
       "type": "CheckpointLoaderSimple",
-      "pos": [
-        -981,
-        -155
-      ],
+      "pos": {
+        "0": -981,
+        "1": -155
+      },
       "size": {
         "0": 315,
         "1": 98
       },
       "flags": {},
-      "order": 5,
+      "order": 6,
       "mode": 0,
+      "inputs": [],
       "outputs": [
         {
           "name": "MODEL",
@@ -889,100 +1034,43 @@
       "bgcolor": "#335"
     },
     {
-      "id": 641,
-      "type": "LoadImage",
-      "pos": [
-        -578,
-        -753
-      ],
-      "size": {
-        "0": 235.36587524414062,
-        "1": 314
+      "id": 803,
+      "type": "KpsMaker",
+      "pos": {
+        "0": 171,
+        "1": -701
       },
-      "flags": {},
-      "order": 6,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            1460
-          ],
-          "slot_index": 0,
-          "shape": 3
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": null,
-          "shape": 3
-        }
-      ],
-      "title": "Load face Referecnce",
-      "properties": {
-        "Node name for S&R": "LoadImage"
-      },
-      "widgets_values": [
-        "han3.jpg",
-        "image"
-      ],
-      "color": "#223",
-      "bgcolor": "#335"
-    },
-    {
-      "id": 677,
-      "type": "EmptyLatentImage",
-      "pos": [
-        605,
-        72
-      ],
       "size": {
-        "0": 315,
-        "1": 106
+        "0": 279.5999755859375,
+        "1": 26
       },
       "flags": {
         "collapsed": true
       },
-      "order": 7,
+      "order": 14,
       "mode": 0,
       "inputs": [
         {
-          "name": "height",
-          "type": "INT",
-          "link": 1576,
-          "widget": {
-            "name": "height"
-          }
-        },
-        {
-          "name": "width",
-          "type": "INT",
-          "link": 1577,
-          "widget": {
-            "name": "width"
-          }
+          "name": "kps_data",
+          "type": "KPS_DATA",
+          "link": 1916
         }
       ],
       "outputs": [
         {
-          "name": "LATENT",
-          "type": "LATENT",
+          "name": "control_image",
+          "type": "IMAGE",
           "links": [
-            1574
+            1917
           ],
-          "slot_index": 0,
-          "shape": 3
+          "slot_index": 0
         }
       ],
       "properties": {
-        "Node name for S&R": "EmptyLatentImage"
+        "Node name for S&R": "KpsMaker"
       },
-      "widgets_values": [
-        1024,
-        1024,
-        1
-      ]
+      "color": "#432",
+      "bgcolor": "#653"
     }
   ],
   "links": [
@@ -1035,22 +1123,6 @@
       "INT"
     ],
     [
-      1578,
-      680,
-      0,
-      678,
-      1,
-      "INT"
-    ],
-    [
-      1579,
-      679,
-      0,
-      678,
-      2,
-      "INT"
-    ],
-    [
       1800,
       252,
       0,
@@ -1073,14 +1145,6 @@
       775,
       3,
       "CONTROL_NET"
-    ],
-    [
-      1803,
-      678,
-      0,
-      775,
-      4,
-      "IMAGE"
     ],
     [
       1881,
@@ -1217,16 +1281,48 @@
       793,
       1,
       "INSTANTID_ADAPTER"
+    ],
+    [
+      1914,
+      679,
+      0,
+      802,
+      2,
+      "INT"
+    ],
+    [
+      1915,
+      680,
+      0,
+      802,
+      1,
+      "INT"
+    ],
+    [
+      1916,
+      802,
+      0,
+      803,
+      0,
+      "KPS_DATA"
+    ],
+    [
+      1917,
+      803,
+      0,
+      775,
+      4,
+      "IMAGE"
     ]
   ],
   "groups": [],
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.7627768444385931,
+      "scale": 0.74002499442588,
       "offset": [
-        25.528750814426488,
-        628.0368316706742
+        861.0086489828302,
+        902.2316706107554
       ]
     },
     "groupNodes": {}
