@@ -2,37 +2,45 @@ import numpy as np
 import cv2
 import math
 import torch
+import math
 import torch.nn.functional as F
 from torchvision.transforms import functional as TF
 from .ip_adapter.instantId import CrossAttentionPatch
 
-def draw_kps(w, h, kps, color_list=[(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), (255, 0, 255)]):
-  stickwidth = 4
-  limbSeq = np.array([[0, 2], [1, 2], [3, 2], [4, 2]])
-  kps = np.array(kps)
+def draw_kps(w, h, kps, color_list=[(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), (255, 0, 255)], alphas=[1, 1, 1, 1, 1]):
+    stickwidth = 4
+    limbSeq = np.array([[0, 2], [1, 2], [3, 2], [4, 2]])
+    kps = np.array(kps)
+    out_img = np.zeros([int(h), int(w), 3], dtype=np.uint8)
 
-  out_img = np.zeros([h, w, 3])
+    for i in range(len(limbSeq)):
+        index = limbSeq[i]
+        color = color_list[index[0]]
+        alpha = alphas[index[0]]
 
-  for i in range(len(limbSeq)):
-    index = limbSeq[i]
-    color = color_list[index[0]]
+        x = kps[index][:, 0]
+        y = kps[index][:, 1]
+        length = ((x[0] - x[1]) ** 2 + (y[0] - y[1]) ** 2) ** 0.5
+        angle = math.degrees(math.atan2(y[0] - y[1], x[0] - x[1]))
 
-    x = kps[index][:, 0]
-    y = kps[index][:, 1]
-    length = ((x[0] - x[1]) ** 2 + (y[0] - y[1]) ** 2) ** 0.5
-    angle = math.degrees(math.atan2(y[0] - y[1], x[0] - x[1]))
-    polygon = cv2.ellipse2Poly(
-        (int(np.mean(x)), int(np.mean(y))), (int(length / 2), stickwidth), int(angle), 0, 360, 1
-    )
-    out_img = cv2.fillConvexPoly(out_img.copy(), polygon, color)
-  out_img = (out_img * 0.6).astype(np.uint8)
+        polygon = cv2.ellipse2Poly(
+            (int(np.mean(x)), int(np.mean(y))), (int(length / 2), stickwidth), int(angle), 0, 360, 1
+        )
 
-  for idx_kp, kp in enumerate(kps):
-    color = color_list[idx_kp]
-    x, y = kp
-    out_img = cv2.circle(out_img.copy(), (int(x), int(y)), 10, color, -1)
+        limb_img = np.zeros_like(out_img)
+        cv2.fillConvexPoly(limb_img, polygon, color)
+        out_img = cv2.addWeighted(out_img, 1, limb_img, float(alpha) * 0.6, 0)
 
-  return out_img.astype(np.uint8)
+    for idx_kp, kp in enumerate(kps):
+        color = color_list[idx_kp]
+        alpha = alphas[idx_kp] 
+        x = kp[0]
+        y = kp[1]
+        kp_img = out_img.copy()
+        cv2.circle(kp_img, (int(x), int(y)), 10, color, -1)
+        out_img = cv2.addWeighted(out_img, 1 - float(alpha), kp_img, float(alpha), 0)
+
+    return out_img.astype(np.uint8)
 
 
 # based on https://github.com/laksjdjf/IPAdapter-ComfyUI/blob/main/ip_adapter.py#L19
@@ -112,7 +120,16 @@ def get_angle(a=(0, 0), b=(0, 0), round_angle=False):
     return angle
 
 
-def rotate_with_pad(image, clockwise, angle):
+def calculate_size_after_rotation(width, height, angle):
+    angle_rad = math.radians(angle)
+    
+    new_width = abs(width * math.cos(angle_rad)) + abs(height * math.sin(angle_rad))
+    new_height = abs(width * math.sin(angle_rad)) + abs(height * math.cos(angle_rad))
+    
+    return (int(np.ceil(new_width)), int(np.ceil(new_height))) #+ 1?
+
+
+def image_rotate_with_pad(image, clockwise, angle):
   if not clockwise: angle *= -1
 
   image = image.squeeze(0)
@@ -121,3 +138,113 @@ def rotate_with_pad(image, clockwise, angle):
   image = image.permute(1, 2, 0)
   image = image.unsqueeze(0)
   return image
+
+
+def kps_rotate_2d(points, original_width, original_height, new_width, new_height, angle):
+    angle_rad = math.radians(angle)
+    
+    original_center_x = original_width / 2
+    original_center_y = original_height / 2
+    
+    new_center_x = new_width / 2
+    new_center_y = new_height / 2
+    
+    cos_angle = math.cos(angle_rad)
+    sin_angle = math.sin(angle_rad)
+    
+    rotated_points = []
+    
+    for point in points:
+        x, y = point
+        
+        translated_x = x - original_center_x
+        translated_y = y - original_center_y
+        
+        rotated_x = translated_x * cos_angle - translated_y * sin_angle
+        rotated_y = translated_x * sin_angle + translated_y * cos_angle
+        
+        final_x = int(round(rotated_x + new_center_x))
+        final_y = int(round(rotated_y + new_center_y))
+        
+        rotated_points.append([final_x, final_y])
+    
+    return rotated_points
+
+
+def kps_rotate_3d(points, angleXDeg, angleYDeg, angleZDeg):
+    angleX = math.radians(angleXDeg)
+    angleY = math.radians(angleYDeg)
+    angleZ = math.radians(angleZDeg)
+
+    center = np.mean(points, axis=0)
+
+    translated_points = np.array([point - center for point in points])
+
+    def rotate_x(point, angle):
+        cos_theta = math.cos(angle)
+        sin_theta = math.sin(angle)
+        return [
+            int(point[0]),
+            int(point[1] * cos_theta - point[2] * sin_theta),
+            int(point[1] * sin_theta + point[2] * cos_theta)
+        ]
+
+    def rotate_y(point, angle):
+        cos_theta = math.cos(angle)
+        sin_theta = math.sin(angle)
+        return [
+            int(point[0] * cos_theta + point[2] * sin_theta),
+            int(point[1]),
+            int(-point[0] * sin_theta + point[2] * cos_theta)
+        ]
+
+    def rotate_z(point, angle):
+        cos_theta = math.cos(angle)
+        sin_theta = math.sin(angle)
+        return [
+            int(point[0] * cos_theta - point[1] * sin_theta),
+            int(point[0] * sin_theta + point[1] * cos_theta),
+            int(point[2])
+        ]
+
+    rotated_points = [
+        rotate_z(rotate_y(rotate_x(point, angleX), angleY), angleZ)
+        for point in translated_points
+    ]
+
+    return [point + center for point in rotated_points]
+
+
+def kps3d_to_kps2d (kps):
+  if len(kps['array'][0]) == 3:
+    kps2d = {
+      'width': kps['width'],
+      'height': kps['height'],
+      'opacities': kps['opacities'][:],
+      'array': []
+    }
+
+    for x, y, _ in kps['array']:
+       kps2d['array'].append([x, y])
+
+    return kps2d
+  return kps
+
+
+def get_bbox_from_kps (kps_data, grow_by):
+  kps = np.array(kps_data['array'])
+  minX, minY = np.min(kps, axis=0)
+  maxX, maxY = np.max(kps, axis=0)
+  width = (maxX - minX) / grow_by
+  height = ((maxY - minY) / grow_by)
+
+  return [
+    [
+      int(max(np.ceil(minX - (width)), 0)),
+      int(max(np.ceil(minY - (height)), 0))
+    ],
+    [
+      int(min(np.ceil(maxX + (width)), kps_data['width'])),
+      int(min(np.ceil(maxY + (height)), kps_data['height']))
+    ]   
+  ]

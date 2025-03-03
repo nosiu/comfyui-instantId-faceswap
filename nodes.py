@@ -2,21 +2,83 @@ import os
 import cv2
 import torch
 import numpy as np
-import folder_paths
-import node_helpers
+import json
 import comfy.utils
-from PIL import Image
+import folder_paths
+from urllib.parse import urlparse, parse_qs
+from server import PromptServer
+from aiohttp import web
+from comfy_execution.graph_utils import GraphBuilder
 from .ip_adapter.resampler import Resampler
 from .ip_adapter.instantId import InstantId
 from insightface.app import FaceAnalysis
-from comfy_execution.graph_utils import GraphBuilder
-from .utils import draw_kps, set_model_patch_replace, resize_to_fit_area, get_mask_bbox_with_padding, get_kps_from_image, get_angle, rotate_with_pad
+from .utils import draw_kps, set_model_patch_replace, resize_to_fit_area, \
+  kps_rotate_2d, kps_rotate_3d, kps3d_to_kps2d, calculate_size_after_rotation, \
+  get_mask_bbox_with_padding,get_kps_from_image,get_angle, image_rotate_with_pad, \
+  get_bbox_from_kps
 
 
 folder_paths.folder_names_and_paths["ipadapter"] = ([os.path.join(folder_paths.models_dir, "ipadapter")], folder_paths.supported_pt_extensions)
 INSIGHTFACE_PATH = os.path.join(folder_paths.models_dir, "insightface")
 CATEGORY_NAME = "InstantId Faceswap"
 MAX_RESOLUTION = 16384
+
+
+#==============================================================================
+# get key points and landmarks position as 3d points and send it back to frontend when requested
+routes = PromptServer.instance.routes
+@routes.post('/get_keypoints_for_instantId')
+async def proxy_handle(request):
+  post = await request.json()
+
+  try:
+    app = FaceAnalysis(
+      name="antelopev2",
+      root=INSIGHTFACE_PATH,
+      providers=["CPUExecutionProvider", "CUDAExecutionProvider"]
+    )
+
+    app.prepare(ctx_id=0, det_size=(640, 640))
+    parsed_url = urlparse(post['image'])
+    queries = parse_qs(parsed_url.query)
+    path = os.path.join(folder_paths.get_directory_by_type(queries['type'][0]), queries['filename'][0])
+    image = cv2.imread(path)
+    faces = app.get(cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+    if len(faces) == 0:
+      raise Exception("No face detected")
+
+    face = sorted(faces, key=lambda x: (x["bbox"][2] - x["bbox"][0]) * (x["bbox"][3] - x["bbox"][1]))[-1] # only use the maximum face
+
+    landmarks_3d = face.landmark_3d_68
+    # KPS
+    left_eye = np.mean(landmarks_3d[36:42], axis=0)
+    right_eye = np.mean(landmarks_3d[42:48], axis=0)
+    nose_tip = np.array([landmarks_3d[33][0], landmarks_3d[33][1], landmarks_3d[30][2]])
+    left_mouth = landmarks_3d[48]
+    right_mouth = landmarks_3d[54]
+    
+    return web.json_response({
+      "status": "ok",
+      "data": {
+        "kps": [ left_eye.tolist(), right_eye.tolist(), nose_tip.tolist(), left_mouth.tolist(), right_mouth.tolist() ],
+        "jawline": landmarks_3d[0:17].tolist(), 
+        "eyebrow_left": landmarks_3d[17:22].tolist(),
+        "eyebrow_right": landmarks_3d[22:27].tolist(),
+        "nose_bridge": landmarks_3d[27:31].tolist(), 
+        "nose_lower": landmarks_3d[31:36].tolist(), 
+        "eye_left": landmarks_3d[36:42].tolist(),
+        "eye_right": landmarks_3d[42:48].tolist(),
+        "mouth_outer": landmarks_3d[48:60].tolist(),
+        "mouth_inner": landmarks_3d[60:68].tolist(),
+        }
+    })
+  except Exception as error:
+      if str(error) == "No face detected":
+        return web.json_response({
+          "error": "No face detected"
+        })
+      else:
+        raise error
 
 
 #==============================================================================
@@ -128,6 +190,37 @@ class AngleFromFace:
 
 
 #==============================================================================
+class AngleFromKps:
+  rotate_modes = ["none", "loseless", "any"]
+  def __init__(self):
+      pass
+
+  @classmethod
+  def INPUT_TYPES(self):
+    return {
+      "required": {
+        "kps_data": ("KPS_DATA",),
+        "rotate_mode": (self.rotate_modes,)
+      },
+    }
+
+  RETURN_TYPES = ("FLOAT",)
+  RETURN_NAMES = ("angle",)
+  FUNCTION = "get_angle"
+  CATEGORY = CATEGORY_NAME
+
+  def get_angle(self, kps_data, rotate_mode):
+    kps_data = json.loads(kps_data)
+    angle = 0.
+    if rotate_mode != "none" :
+      angle = get_angle(
+        kps_data['array'][0], kps_data['array'][1],
+        round_angle = True if rotate_mode == "loseless" else False
+      )
+    return (angle,)
+
+
+#==============================================================================
 class ComposeRotated:
   def __init__(self):
     pass
@@ -167,6 +260,32 @@ class ComposeRotated:
     image = rotated_image[:, pad_y1:pad_y2, pad_x1:pad_x2, :]
     return (image,)
 
+
+#==============================================================================
+class RotateImage:
+  @classmethod
+  def INPUT_TYPES(self):
+    return {
+      "required": {
+        "image": ("IMAGE",),
+        "angle": ("FLOAT", {"default": 0.0, "min": -360.0, "step": 0.1, "max": 360.0},),
+        "counter_clockwise": ("BOOLEAN", {"default": True},),
+      }
+    }
+
+  RETURN_TYPES = ("IMAGE",)
+  RETURN_NAMES = ("rotated_image", "rotated_mask",)
+  FUNCTION = "rotate_and_pad_image"
+  CATEGORY = CATEGORY_NAME
+
+  def rotate_and_pad_image(self, image, angle, counter_clockwise):
+    if angle == 0 or angle == 360:
+      return (image,)
+
+    image = image_rotate_with_pad(image, counter_clockwise, angle)
+
+    return (image,)
+  
 
 #==============================================================================
 class LoadInstantIdAdapter:
@@ -503,76 +622,399 @@ class LoadInsightface:
 
 
 #==============================================================================
-class KpsMaker:
+class KpsDraw:
   @classmethod
   def INPUT_TYPES(self):
     return {
       "required": {
-        "image": ("STRING",),
         "width": ("INT", {"default": 1024, "min": 0, "step": 1, "max": MAX_RESOLUTION}),
         "height": ("INT", {"default": 1024, "min": 0, "step": 1, "max": MAX_RESOLUTION}),
+        "kps": ("HIDDEN_STRING_JSON", ),
       },
       "optional": {
         "image_reference": ("IMAGE",),
       }
     }
 
-  RETURN_TYPES = ("IMAGE", "MASK",)
-  RETURN_NAMES = ("control_image", "mask",)
+  RETURN_TYPES = ("KPS_DATA",)
+  RETURN_NAMES = ("kps_data",)
   FUNCTION = "draw_kps"
   CATEGORY = CATEGORY_NAME
 
-  def draw_kps(self, image, width, height, image_reference = None):
-    if "clipspace" not in image:
-      image_path = os.path.join(
-        folder_paths.get_input_directory(),
-        "faceswap_controls",
-        image
-      )
-    else: # with mask - saved in different directory
-      image_path = os.path.join(
-        folder_paths.get_input_directory(),
-        image[:-8]
-      )
-
-    pil_image = node_helpers.pillow(Image.open, image_path)
-    image = pil_image.convert("RGB")
-    image = np.array(image).astype(np.float32) / 255.0
-    image = torch.from_numpy(image).unsqueeze(0)
-
-    if "A" in pil_image.getbands():
-      mask = np.array(pil_image.getchannel("A")).astype(np.float32) / 255.0
-      mask = 1. - torch.from_numpy(mask)
-    else:
-      mask = torch.zeros((64, 64), dtype=torch.float32, device="cpu")
-    mask = mask.unsqueeze(0)
-    return (image, mask,)
-
-
+  def draw_kps(self, width, height, kps, image_reference = None):
+    return (kps,)
+  
+ 
 #==============================================================================
-class RotateImage:
+class Kps3dFromImage:
   @classmethod
   def INPUT_TYPES(self):
     return {
       "required": {
+        "width": ("INT", {"default": 1024, "min": 0, "step": 1, "max": MAX_RESOLUTION}),
+        "height": ("INT", {"default": 1024, "min": 0, "step": 1, "max": MAX_RESOLUTION}),
+        "kps": ("HIDDEN_STRING_JSON", ),
+      },
+       "optional": {
         "image": ("IMAGE",),
+      }
+    }
+
+  RETURN_TYPES = ("KPS_DATA_3D", "KPS_DATA",)
+  RETURN_NAMES = ("kps_data_3d", "kps_data")
+  FUNCTION = "make_kps"
+  CATEGORY = CATEGORY_NAME
+
+  def make_kps(self, width, height, kps, image):
+
+    kps_2d = kps3d_to_kps2d(json.loads(kps))
+
+    return (kps, json.dumps(kps_2d),)
+
+
+#==============================================================================
+class KpsMaker:
+  @classmethod
+  def INPUT_TYPES(self):
+    return {
+      "required": {
+        "kps_data": ("KPS_DATA",),
+      }
+    }
+
+  RETURN_TYPES = ("IMAGE",)
+  RETURN_NAMES = ("control_image",)
+  FUNCTION = "draw_kps"
+  CATEGORY = CATEGORY_NAME
+
+  def draw_kps(self, kps_data):
+    kps_data = json.loads(kps_data)
+
+    control_image = draw_kps(kps_data['width'], kps_data["height"], kps_data["array"], alphas = kps_data["opacities"])
+    control_image = (torch.from_numpy(control_image).float() / 255.0).unsqueeze(0)
+
+    return (control_image, )
+  
+
+#==============================================================================
+class Kps2dRandomizer:
+  @classmethod
+  def INPUT_TYPES(self):
+    return {
+      "required": {
+        "kps_data": ("KPS_DATA",),
+        "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff, "tooltip": "The random seed used for randomizing KPS"}),
+        "angle_min": ("INT", {"default": 0, "min": -180, "step": 1, "max": 180}),
+        "angle_max": ("INT", {"default": 0, "min": -180, "step": 1, "max": 180}),
+        "scale_min": ("FLOAT", {"default": 1, "min": 0.1, "step": 0.01, "max": 5}),
+        "scale_max": ("FLOAT", {"default": 1, "min": 0.1, "step": 0.01, "max": 5}),
+        "translate_x": ("INT", {"default": 0, "min": 0, "step": 1, "max": MAX_RESOLUTION}),
+        "translate_y": ("INT", {"default": 0, "min": 0, "step": 1, "max": MAX_RESOLUTION}),
+        "border": ("INT", {"default": 0, "min": 0, "step": 1, "max": MAX_RESOLUTION}),
+      }
+    }
+
+  RETURN_TYPES = ("KPS_DATA",)
+  RETURN_NAMES = ("kps_data",)
+  FUNCTION = "rand_kps"
+  CATEGORY = CATEGORY_NAME
+
+  def rand_kps(self, kps_data, seed, angle_min, angle_max, scale_min, scale_max, translate_x, translate_y, border):
+
+    torch.manual_seed(seed)
+    kps_data = json.loads(kps_data)
+
+    angle = 0
+    scale = 1
+    width = kps_data['width']
+    height = kps_data['height']
+
+    # get random angle
+    if angle_min != 0 and angle_max != 0:
+      angle = torch.randint(angle_min, angle_max + 1, (1,)).item()
+
+    # get random scale
+    if scale_min != 1 and scale_max != 1:
+      scale = (scale_max - scale_min) * torch.rand(1).item() + scale_min
+
+    # get random translate_x and translate_y
+    if translate_x != 0:
+        random_translate_x = torch.randint(-int(translate_x), int(translate_x) + 1, (1,)).item()
+    else:
+        random_translate_x = 0
+
+    if translate_y != 0:
+        random_translate_y = torch.randint(-int(translate_y), int(translate_y) + 1, (1,)).item()
+    else:
+        random_translate_y = 0
+
+    # rotate
+    if angle != 0:
+      centroid = np.mean(np.array(kps_data["array"]), axis=0)
+      angle_rad = np.radians(angle)
+
+      rotated_points = []
+      for x, y in kps_data["array"]:
+        translated_x = x - centroid[0]
+        translated_y = y - centroid[1]
+        
+        rotated_x = translated_x * np.cos(angle_rad) - translated_y * np.sin(angle_rad)
+        rotated_y = translated_x * np.sin(angle_rad) + translated_y * np.cos(angle_rad)
+
+        rotated_points.append([rotated_x + centroid[0], rotated_y + centroid[1]])
+
+      kps_data["array"] = rotated_points
+  
+    # translate
+    if random_translate_x != 0 or random_translate_y != 0:
+        translated_points = []
+        for x, y in kps_data["array"]:
+            translated_points.append([x + random_translate_x, y + random_translate_y])
+        kps_data["array"] = translated_points
+
+    # scale
+    if scale_min != 1 and scale_max != 1:
+        scaled_points = []
+        centroid = np.mean(np.array(kps_data["array"]), axis=0)
+        for x, y in kps_data["array"]:
+            scaled_points.append([
+                centroid[0] + (x - centroid[0]) * scale,
+                centroid[1] + (y - centroid[1]) * scale
+            ])
+        kps_data["array"] = scaled_points
+
+    # check border
+    x_values = [x for x, _ in kps_data["array"]]
+    y_values = [y for _, y in kps_data["array"]]
+
+    min_x, max_x = min(x_values), max(x_values)
+    min_y, max_y = min(y_values), max(y_values)
+
+    shift_x = 0
+    shift_y = 0
+
+    if min_x < border:
+      shift_x = border - min_x 
+    elif max_x > width - border:
+      shift_x = (width - border) - max_x 
+
+    if min_y < border:
+        shift_y = border - min_y 
+    elif max_y > height - border:
+        shift_y = (height - border) - max_y 
+
+
+
+    final_output = []
+    for x, y in kps_data["array"]:
+        shifted_x = x + shift_x
+        shifted_y = y + shift_y
+        final_output.append([int(shifted_x), int(shifted_y)])
+
+    kps_data["array"] = final_output
+
+    return (json.dumps(kps_data), )
+
+#==============================================================================
+class Kps3dRandomizer:
+  @classmethod
+  def INPUT_TYPES(self):
+    return {
+      "required": {
+        "kps_data_3d": ("KPS_DATA_3D",),
+        "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff, "tooltip": "The random seed used for randomizing KPS"}),
+        "rotate_x": ("INT", {"default": 0, "min": -180, "step": 1, "max": 180}),
+        "rotate_y": ("INT", {"default": 0, "min": -180, "step": 1, "max": 180}),
+        "rotate_z": ("INT", {"default": 0, "min": -180, "step": 1, "max": 180})
+      }
+    }
+
+  RETURN_TYPES = ("KPS_DATA",)
+  RETURN_NAMES = ("kps_data",)
+  FUNCTION = "rand_kps"
+  CATEGORY = CATEGORY_NAME
+
+  def rand_kps(self, kps_data_3d, seed, rotate_x, rotate_y, rotate_z):
+    torch.manual_seed(seed)
+    kps_data = json.loads(kps_data_3d)
+
+    angle_x = 0
+    if rotate_x != 0:
+      angle_x = torch.randint(-rotate_x, rotate_x + 1, (1,)).item()
+    angle_y = 0
+    if rotate_y != 0:
+      angle_y = torch.randint(-rotate_y, rotate_y + 1, (1,)).item()
+    angle_z = 0
+    if rotate_x != 0:
+      angle_z = torch.randint(-rotate_z, rotate_z + 1, (1,)).item()
+
+    angle_x += kps_data['rotateX']
+    angle_y += kps_data['rotateY']
+    angle_z += kps_data['rotateZ']
+    if angle_x != 0 or angle_y != 0 or angle_z != 0: 
+      points = kps_rotate_3d(kps_data['array'], angle_x, angle_y, angle_z)
+    else:
+      points = kps_data['array']
+
+    kps_data['array'] = points
+    kps_data = kps3d_to_kps2d(kps_data)
+  
+    return (json.dumps(kps_data), )
+
+
+#==============================================================================
+class Kps2dScaleBy:
+  @classmethod
+  def INPUT_TYPES(self):
+    return {
+      "required": {
+        "kps_data": ("KPS_DATA",),
+        "scale": ("FLOAT", {"default": 1, "min": 0, "max": 100}),
+      }
+    }
+
+  RETURN_TYPES = ("KPS_DATA",)
+  RETURN_NAMES = ("kps_data",)
+  FUNCTION = "scale_kps_by"
+  CATEGORY = CATEGORY_NAME
+
+  def scale_kps_by(self, kps_data, scale):
+    kps_data = json.loads(kps_data)
+
+    points = kps_data['array']
+    kps_data['width'] = int(kps_data['width'] * scale)
+    kps_data['height'] = int(kps_data['height'] * scale)
+    for i, point in enumerate(points):
+      kps_data['array'][i][0] = int(point[0] * scale)
+      kps_data['array'][i][1] = int(point[1] * scale)
+  
+    return (json.dumps(kps_data), )
+
+
+#==============================================================================
+class Kps2dScale:
+  @classmethod
+  def INPUT_TYPES(self):
+    return {
+      "required": {
+        "kps_data": ("KPS_DATA",),
+        "width": ("INT", {"default": 1024, "min": 0, "max": MAX_RESOLUTION}),
+        "height": ("INT", {"default": 1024, "min": 0, "max": MAX_RESOLUTION}),
+      }
+    }
+
+  RETURN_TYPES = ("KPS_DATA",)
+  RETURN_NAMES = ("kps_data",)
+  FUNCTION = "scale_kps"
+  CATEGORY = CATEGORY_NAME
+
+  def scale_kps(self, kps_data, width, height):
+    kps_data = json.loads(kps_data)
+
+    points = kps_data['array']
+    scaleX =  width / kps_data['width']
+    scaleY =  height / kps_data['height']
+    kps_data['width'] = int(kps_data['width'] * scaleX)
+    kps_data['height'] = int(kps_data['height'] * scaleY)
+
+    for i, point in enumerate(points):
+      kps_data['array'][i][0] = int(point[0] * scaleX)
+      kps_data['array'][i][1] = int(point[1] * scaleY)
+  
+    return (json.dumps(kps_data), )
+  
+
+#==============================================================================
+class Kps2dRotate:
+  @classmethod
+  def INPUT_TYPES(self):
+    return {
+      "required": {
+        "kps_data": ("KPS_DATA",),
         "angle": ("FLOAT", {"default": 0.0, "min": -360.0, "step": 0.1, "max": 360.0},),
         "counter_clockwise": ("BOOLEAN", {"default": True},),
       }
     }
 
-  RETURN_TYPES = ("IMAGE",)
-  RETURN_NAMES = ("rotated_image", "rotated_mask",)
-  FUNCTION = "rotate_and_pad_image"
+  RETURN_TYPES = ("KPS_DATA",)
+  RETURN_NAMES = ("kps_data",)
+  FUNCTION = "rotate_kps"
   CATEGORY = CATEGORY_NAME
 
-  def rotate_and_pad_image(self, image, angle, counter_clockwise):
+  def rotate_kps(self, kps_data, angle, counter_clockwise):
     if angle == 0 or angle == 360:
-      return (image,)
+      return (kps_data,)
 
-    image = rotate_with_pad(image, counter_clockwise, angle)
-    return (image,)
+    if counter_clockwise: angle = -angle
 
+    kps_data = json.loads(kps_data)
+
+    points = kps_data['array']
+    new_width, new_height = calculate_size_after_rotation(kps_data['width'], kps_data['height'], angle)
+
+    kps_data['array'] = kps_rotate_2d(points, kps_data['width'], kps_data['height'], int(new_width), int(new_height), angle)
+    kps_data['width'] = int(new_width)
+    kps_data['height'] = int(new_height)
+
+    return (json.dumps(kps_data), )
+  
+#==============================================================================
+class Kps2dCrop:
+  @classmethod
+  def INPUT_TYPES(self):
+    return {
+      "required": {
+        "kps_data": ("KPS_DATA",),
+        "x": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION, "step": 1}),
+        "y": ("INT", {"default": 0, "min": 0, "max": MAX_RESOLUTION, "step": 1}),
+        "width": ("INT", {"default": 1024, "min": 1, "max": MAX_RESOLUTION, "step": 1}),
+        "height": ("INT", {"default": 1024, "min": 1, "max": MAX_RESOLUTION, "step": 1}),
+      }
+    }
+
+  RETURN_TYPES = ("KPS_DATA",)
+  RETURN_NAMES = ("kps_data",)
+  FUNCTION = "crop_kps"
+  CATEGORY = CATEGORY_NAME
+
+  def crop_kps(self, kps_data, x, y, width, height):
+    kps_data = json.loads(kps_data)
+
+    kps_data['width'] = width
+    kps_data['height'] = height
+
+    points = kps_data['array']
+
+    for i, point in enumerate(points):
+      kps_data['array'][i][0] = point[0] - x#
+      kps_data['array'][i][1] = point[1] - y#
+
+    return (json.dumps(kps_data), )
+  
+
+#==============================================================================
+class MaskFromKps:
+  @classmethod
+  def INPUT_TYPES(self):
+    return {
+      "required": {
+        "kps_data": ("KPS_DATA",),
+        "grow_by": ("INT", {"default": 4, "min": 1, "max": 10, "step": 1}),
+      }
+    }
+
+  RETURN_TYPES = ("MASK",)
+  RETURN_NAMES = ("mask",)
+  FUNCTION = "creat_mask"
+  CATEGORY = CATEGORY_NAME
+
+  def creat_mask(self, kps_data, grow_by):
+    kps_data = json.loads(kps_data)
+    bbox = get_bbox_from_kps(kps_data, grow_by)
+    mask = torch.zeros((kps_data['height'], kps_data['width']))
+    mask[bbox[0][1]:bbox[1][1], bbox[0][0]:bbox[1][0]] = 1
+
+    return (mask.unsqueeze(0), )
 
 NODE_CLASS_MAPPINGS = {
   "LoadInsightface": LoadInsightface,
@@ -583,9 +1025,19 @@ NODE_CLASS_MAPPINGS = {
   "PreprocessImage": PreprocessImage,
   "PreprocessImageAdvanced": PreprocessImageAdvanced,
   "AngleFromFace": AngleFromFace,
+  "AngleFromKps": AngleFromKps,
   "RotateImage": RotateImage,
   "ComposeRotated": ComposeRotated,
+  "KpsDraw": KpsDraw,
+  "Kps3dFromImage": Kps3dFromImage,
   "KpsMaker": KpsMaker,
+  "Kps2dRandomizer": Kps2dRandomizer,
+  "Kps3dRandomizer": Kps3dRandomizer,
+  "KpsScale": Kps2dScale,
+  "KpsScaleBy": Kps2dScaleBy,
+  "KpsRotate": Kps2dRotate,
+  "KpsCrop": Kps2dCrop,
+  "MaskFromKps": MaskFromKps,
   "FaceEmbed": FaceEmbed,
   "FaceEmbedCombine": FaceEmbedCombine
 
@@ -600,9 +1052,19 @@ NODE_DISPLAY_NAME_MAPPINGS = {
   "PreprocessImage": "Preprocess image for instantId",
   "PreprocessImagAdvancese": "Preprocess image for instantId (Advanced)",
   "AngleFromFace": "Get Angle from face",
+  "AngleFromKps": "Get Angle from KPS data",
   "RotateImage": "Rotate Image",
   "ComposeRotated": "Remove rotation padding",
-  "KpsMaker": "Draw KPS",
+  "KpsDraw": "Draw KPS",
+  "Kps3dFromImage": "3d KPS from image",
+  "KpsMaker": "Create KPS Image",
+  "Kps2dRandomizer": "Randomize 2d KPS",
+  "Kps3dRandomizer": "Randomize 3d KPS",
+  "Kps2dScaleBy": "Scale 2d KPS by",
+  "Kps2dScale": "Scale 2d KPS",
+  "KpsRotate": "Rotate 2d KPS",
+  "KpsCrop": "Crop 2d KPS",
+  "MaskFromKps": "Create mask from Kps",
   "FaceEmbed": "FaceEmbed for instantId",
   "FaceEmbedCombine": "FaceEmbed Combine"
 }

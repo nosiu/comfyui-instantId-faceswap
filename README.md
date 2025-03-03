@@ -1,7 +1,8 @@
-# ComfyUI InstantID FaceSwap v0.1.0
-<sub>[About](#comfyui-instantid-faceswap-v010) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+# ComfyUI InstantID FaceSwap v0.1.1
+<sub>[About](#comfyui-instantid-faceswap-v011) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
-Implementation of [faceswap](https://github.com/nosiu/InstantID-faceswap/tree/main) based on [InstantID](https://github.com/InstantID/InstantID) for ComfyUI.
+Implementation of [faceswap](https://github.com/nosiu/InstantID-faceswap/tree/main) based on [InstantID](https://github.com/InstantID/InstantID) for ComfyUI. \
+Since version 0.1.0 it also allows generating people based on text.
 </br>
 **Works ONLY with SDXL checkpoints**
 </br>
@@ -13,7 +14,7 @@ Implementation of [faceswap](https://github.com/nosiu/InstantID-faceswap/tree/ma
 
 
 ## Installation guide
-<sub>[About](#comfyui-instantid-faceswap-v010) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+<sub>[About](#comfyui-instantid-faceswap-v011) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
 1. Clone or download this repository and put it into **ComfyUI/custom_nodes**
 2. Open commandline in the  **ComfyUI/custom_nodes/comfyui-instantId-faceswap/** folder and type `pip install -r requirements.txt` to install dependencies
@@ -54,7 +55,7 @@ ComfyUI
 Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containing those files to the config.
 
 ## Custom nodes
-<sub>[About](#comfyui-instantid-faceswap-v010) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+<sub>[About](#comfyui-instantid-faceswap-v011) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
 - ### Load Insightface:
    Loads Insightface. Models need to be in a specific location. Check the  [Installation guide](#installation-guide) for details.
@@ -120,6 +121,17 @@ Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containin
    - **pad_bottom** - how many pixels to enlarge the mask downwards
    - **pad_left**  -  how many pixels to enlarge the mask to the left
 
+
+- ### Get Angle from KPS data
+   Returns the angle (in degrees) by which the image must be rotated counterclockwise to align the face.
+
+   **Params:**
+   - **rotate_mode** - available options:
+      - *none* - returns 0
+      - *loseless* - returns the closest angle to 90, 180, 270 degrees
+      - *any* - returns a specific angle by which the image should be rotated
+
+
 - ### Rotate Image
    Rotates the image by the given angle and expands it.
 
@@ -140,6 +152,8 @@ Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containin
 
    When you place your KPS in the desired position, this node will show the angle by which the image should be rotated to align the face.
 
+   You can adjust the opacity of each keypoint to sacrifice likeness, for example, when adding "glasses".
+
    **Shortcuts:**\
       **CTRL + DRAG** - move around\
       **CTRL + WHEEL** - zoom in / out\
@@ -149,6 +163,29 @@ Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containin
    - **image_reference** (optional) - an image that serves as a background to more accurately match the appropriate points. If provided, the resulting image will have the width and height of this image.
    - **width** - width of the image (disabled if `image_reference` is provided)
    - **height** - height of the image (disabled if `image_reference` is provided)
+
+- ### 3d KPS from image
+   Allows you to extract 3D keypoints (KPS) of a face from an image. This is useful when generating content from text prompts and wanting to rotate the face while preserving the distance between the eyes, nose, and mouth.
+
+   To use it, connect the `image` node, then click the **"Get KPS From Image"** button. Afterward, you can adjust the scale, position, and rotation of the face by clicking the **"Change KPS"** button.
+
+   **IMPORTANT:** 
+      - Clicking Get KPS From Image will run InsightFace to extract KPS data, so it’s best not to use this in the middle of the generation process (this depends on your system's performance).
+      - You cannot manually change the distance between KPS in this node.
+
+   Once your KPS are placed in the desired position, the node will show the angle by which the image should be rotated to align the face.
+
+   You can adjust the opacity of each keypoint to sacrifice likeness, for example, when adding "glasses".
+
+   **Shortcuts:**\
+      **CTRL + DRAG** - move around\
+      **CTRL + WHEEL** - zoom in / out\
+      **ALT + WHEEL** - scale KPS
+
+   **Params:**
+   - **image** - an image of face from which KPS will be calculated
+   - **width** - width of the image
+   - **height** - height of the image
 
 
 - ### Preprocess image for instantId:
@@ -183,8 +220,74 @@ Instead, You can edit `ComfyUI/extra_model_paths.yaml` and add folders containin
    - **pad_bottom** - how many pixels to enlarge the mask downwards
    - **pad_left**  -  how many pixels to enlarge the mask to the left
 
+
+- ### Randomize 2d KPS
+   Randomizes the position, angle, and rotation of the KPS based on the provided parameters.
+
+   **Params:**
+   - **angle_min** - minimum rotation angle. The rotation point is the center of the KPS,
+   - **angle_max** - maximum rotation angle, the rotation point is the center of the KPS,
+   - **scale_min** - minimum scaling value relative to the KPS center (1 means no scaling),
+   - **scale_max** - maximum scaling value relative to the KPS center (1 means no scaling),
+   - **translate_x** - value by which to shift the KPS along the X axis. For example, setting it to 200 will randomly select a shift value between -200 and 200,
+   - **translate_y** - value by which to shift the KPS along the Y axis. For example, setting it to 200 will randomly select a shift value between -200 and 200,
+   - **border** - edge threshold; if the KPS gets too close to the image border during translation, rotation, or scaling, it will be repositioned to this value
+
+
+- ### Randomize 3d KPS
+   Randomizes the rotation of the KPS around three axes. Setting any of the parameters will randomly select a rotation angle around the corresponding axis. The rotation point is the center of the KPS.
+   Example: Setting rotate_x to 20 will rotate the KPS by a random angle between -20 and 20 degrees.
+
+   **Params:**
+   - **rotate_x** - rotation angle around the X axis,
+   - **rotaet_y** - rotation angle around the Y axis,
+   - **rotate_z** - rotation angle around the Z axis,
+
+
+- ### Scale 2d KPS by
+   Scales the KPS data by a given factor.
+
+   **Params:**
+   - **scale**: scaling factor
+
+
+- ### Scale 2d KPS
+   Scales the KPS data to the specified width and height.
+
+   **Params:**
+   - **width**: desired width,
+   - **height**: desired height
+
+
+- ### Rotate 2d KPS
+   Rotates the KPS by the given angle and expands it.
+
+   **Params:**
+   - **angle**: rotation angle
+
+
+ - ### Crop 2d KPS
+   Crops the KPS.
+
+   **Params:**
+   - **x**: X coordinate of the top-left corner,
+   - **y**: Y coordinate of the top-left corner,
+   - **width**:  width of the cropped area,
+   - **height**: height of the cropped area,
+
+
+ - ### Create KPS Image
+   Creates a control_image from `kps_data`
+
+
+ - ### Create mask from Kps
+   Creates a mask based on the KPS position.
+
+   **Params:**
+   - **grow_by** - expands the mask by adding extra space on all sides. The additional margin on each side is equal to the mask’s dimension divided by this value. For example, if the KPS width is 20 pixels and grow_by is set to 10, an extra 20/10 (i.e., 2 pixels) will be added to the left and right sides — resulting in a new width of 20 + 2 + 2 = 24 pixels. The same applies to the height.
+
 ## Workflows
-<sub>[About](#comfyui-instantid-faceswap-v010) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+<sub>[About](#comfyui-instantid-faceswap-v011) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
 
 You can find example workflows in the `/workflows` folder.
@@ -232,17 +335,12 @@ Same as `simple_with_adapter.json`, but it will automatically detect the angle o
 Generates an image based only on the face reference and prompts. Set your face reference, draw the KPS where the face should be drawn, and add prompts like "man sitting in the park."
 
 ### promp2image_detail_pass.json
-Same as `prompt2image.json`, but this one expects the KPS you draw to be very small, so the face is not detailed (or may even be deformed). Draw a mask on the `Draw KPS` node (on the KPS and surrounding area), and it will perform the face swap in that region.
+Same as `prompt2image.json`, but this one expects the KPS you draw to be small, so the face is not detailed (or may even be deformed). Second pass should fix the face.
 
-<details>
-  <summary>View Example Image</summary>
-    
-  ![MASK KPS](https://github.com/user-attachments/assets/2c5e78ed-b1e7-497e-b9d7-4969984afeca)
-</details>
 
 ### prompts2img_2faces_enhancement.json
 A workflow that generates two faces in one image and enhances them one by one.
-Set your face references and KPS for one image, then set a second KPS in another region of the picture. Afterward, mask both KPS. Good results depend on your prompts.
+Set your face references and KPS for one image, then set a second KPS in another region of the picture. Good results depend on your prompts.
 
 <details>
   <summary>View Example Image</summary>
@@ -260,18 +358,47 @@ Since you can use the `Preprocess Image for InstantId` and `Preprocess Image for
 
 </details>
 
+### prop2image_latent_upscale.json
+Similar to `promp2image_detail_pass.json`, this workflow allows you to draw your KPS. The workflow will run a first pass at 50%, upscale the latent by `1.4`, and finish with a detail pass on the face area.
+
+### prop2image_latent_upscale_with_2d_randomizer.json
+Same as `prop2image_latent_upscale.json`, but it will randomize the position of the face within the image.
+
+### prop2image_latent_upscale_with_3d_and_2d_randomizer.json
+Similar to `prop2image_latent_upscale_with_2d_randomizer.json`, but instead of drawing your KPS, you retrieve them from a face image (in 3d).
+Click the **"Get KPS from image"** button on the 3D KPS from Image node, then use the **"Change KPS"** button to adjust the position of your KPS. You can also randomize the 3D rotation in this workflow.
+
+### prop2image_latent_upscale_with_3d_and_2d_randomizer_with_rotation.json
+Exactly the same as `prop2image_latent_upscale_with_3d_and_2d_randomizer.json`, with one small addition: you can set the face rotation method during the last pass. The workflow will rotate the face to a "straight" position, process the image, and then composite it into the final result.
+
+The default rotation is set to "any," so you might encounter some artifacts from the rotation. You can adjust this setting as needed.
+
 ## Tips
-<sub>[About](#comfyui-instantid-faceswap-v010) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+<sub>[About](#comfyui-instantid-faceswap-v011) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
 
 - Most workflows require you to draw a mask on the pose image.
 - If you encounter the error `No face detected in pose image`, try drawing a larger mask or increasing the `pad` parameter or draw KPS yourself.
+- You can adjust the opacity of each keypoint to preserve original features or rely more on your prompts without sacrificing the overall likeness of the face.
 - You can modify more than just the face — add accessories like a hat, change hair, or even alter expressions.
 - If you're changing a lot of elements unrelated to the face, it's a good idea to add a second pass focused primarily on the face area to enhance detail.
 - To improve results, you can integrate other extensions such as ControlNet for inpainting, Fooocus inpaint, FaceShaper, Expression Lora, and many more.
 - To understand the relationship between ControlNet and the adapter, check the official paper linked in the instantId repository: https://github.com/instantX-research/InstantID?tab=readme-ov-file
 
 ## Changelog
-<sub>[About](#comfyui-instantid-faceswap-v010) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+<sub>[About](#comfyui-instantid-faceswap-v011) | [Installation guide](#installation-guide) | [Custom nodes](#custom-nodes) | [Workflows](#workflows) | [Tips](#tips) | [Changelog](#changelog)</sub>
+
+- ### 0.1.1 (03.03.2025)
+   - Introduced new nodes to ensure proper KPS size.
+   - Removed the ability to draw masks on the KPS node (a separate node is available for this).
+   - Added the ability to add transparency to individual KPS, providing similar functionality as `ControlNet Scale` but for specific parts of the face (e.g., adding glasses).
+   - The generation of KPS control images has been entirely moved to the backend (Python). You can still draw KPS manually, but this change reduces the creation of temporary files.
+   - Drawn KPS positions are now saved into the workflow.
+   - Added the ability to import 3D KPS positions from the face, allowing rotation, scaling, and movement of those points while preserving the distance between the eyes, nose, and mouth.
+   - Added options to randomize position, rotation, and KPS scaling to diversify final images.
+   - Added the ability to randomize 3D face rotation to further diversify results.
+   - To diversify results even further, you can use tools like [comfyui-text-randomizer](https://github.com/nosiu/comfyui-text-randomizer), which was created as a side project during the development of this repository.
+
+   **Note:** Some old workflows will not be compatible with this version.
 
 
 - ### 0.1.0 (20.10.2024)
