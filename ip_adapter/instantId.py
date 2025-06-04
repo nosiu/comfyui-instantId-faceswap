@@ -1,5 +1,6 @@
 import torch
 from comfy.ldm.modules.attention import optimized_attention
+import comfy.utils
 
 class InstantId(torch.nn.Module):
   def __init__(self, ip_adapter):
@@ -28,7 +29,9 @@ class CrossAttentionPatch:
     self.number = number
 
   def __call__(self, q, k, v, extra_options):
-    dtype = torch.float16
+    dtype = comfy.model_management.unet_dtype()
+    if dtype not in [torch.float32, torch.float16, torch.bfloat16]:
+        dtype = torch.float16 if comfy.model_management.should_use_fp16() else torch.float32
     hidden_states = optimized_attention(q, k, v, extra_options["n_heads"])
     for scale, cond, instantId in zip(self.scales, self.conds,  self.instantIds):
       k_cond = instantId.to_kvs[str(self.number*2+1) + "_to_k_ip"](cond).to(dtype=dtype)
